@@ -232,8 +232,11 @@ export class AuthService {
       if (!userRow) {
         throw new AuthServiceError("DATABASE_ERROR", "User not found", 404);
       }
-      if (userRow.status !== "approved") {
+      if (userRow.status === "pending") {
         throw new AuthServiceError("ACCOUNT_PENDING", "Account pending approval", 403);
+      }
+      if (userRow.status === "suspended") {
+        throw new AuthServiceError("ACCOUNT_SUSPENDED", "Account suspended", 403);
       }
 
       const { data: updatedRow, error: updateError } = await supabaseAdmin
@@ -349,6 +352,30 @@ export class AuthService {
         throw error;
       }
       throw new AuthServiceError("RESET_PASSWORD_FAILED", "Password reset failed", 500);
+    }
+  }
+
+  static async updatePasswordWithToken(token: string, newPassword: string): Promise<void> {
+    try {
+      const { data, error } = await supabaseAdmin.auth.verifyOtp({
+        token_hash: token,
+        type: "recovery",
+      });
+      if (error || !data?.user) {
+        throw new AuthServiceError("INVALID_TOKEN", "Invalid or expired reset token", 401);
+      }
+
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+        password: newPassword,
+      });
+      if (updateError) {
+        throw new AuthServiceError("PASSWORD_UPDATE_FAILED", "Password update failed", 500);
+      }
+    } catch (error) {
+      if (error instanceof AuthServiceError) {
+        throw error;
+      }
+      throw new AuthServiceError("PASSWORD_UPDATE_FAILED", "Password update failed", 500);
     }
   }
 

@@ -4,6 +4,14 @@ jest.mock("../../src/services/auth.service", () => ({
   AuthService: {},
 }));
 
+jest.mock("../../src/services/product.service", () => ({
+  ProductService: {},
+}));
+
+jest.mock("../../src/services/storage.service", () => ({
+  StorageService: {},
+}));
+
 import app from "../../src/index";
 
 describe("GET /health", () => {
