@@ -1,4 +1,9 @@
 import request from "supertest";
+
+jest.mock("../../src/services/auth.service", () => ({
+  AuthService: {},
+}));
+
 import app from "../../src/index";
 
 describe("GET /health", () => {
