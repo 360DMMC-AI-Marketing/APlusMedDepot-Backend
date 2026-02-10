@@ -1,10 +1,23 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
+import multer from "multer";
 
 import { AppError } from "../utils/errors";
 
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
   console.error(err);
+
+  if (err instanceof multer.MulterError) {
+    const message =
+      err.code === "LIMIT_FILE_SIZE" ? "File too large. Maximum size is 5MB" : err.message;
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message,
+      },
+    });
+    return;
+  }
 
   if (err instanceof ZodError) {
     const details: Record<string, string> = {};

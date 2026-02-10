@@ -21,6 +21,14 @@ jest.mock("../../src/services/auth.service", () => ({
   },
 }));
 
+jest.mock("../../src/services/product.service", () => ({
+  ProductService: {},
+}));
+
+jest.mock("../../src/services/storage.service", () => ({
+  StorageService: {},
+}));
+
 jest.mock(
   "express-rate-limit",
   () => () => (_req: unknown, _res: unknown, next: () => void) => next(),
