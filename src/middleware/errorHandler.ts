@@ -1,9 +1,52 @@
 import { Request, Response, NextFunction } from "express";
+import { ZodError } from "zod";
+
+import { AppError } from "../utils/errors";
 
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
-  console.error(err.stack);
+  console.error(err);
+
+  if (err instanceof ZodError) {
+    const details: Record<string, string> = {};
+    for (const issue of err.issues) {
+      const field = issue.path.join(".");
+      details[field] = issue.message;
+    }
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid request data",
+        details,
+      },
+    });
+    return;
+  }
+
+  if (err instanceof AppError) {
+    res.status(err.statusCode).json({
+      error: {
+        code: err.code,
+        message: err.message,
+      },
+    });
+    return;
+  }
+
+  const serviceError = err as unknown as { statusCode?: unknown; code?: unknown };
+  if (typeof serviceError.statusCode === "number" && typeof serviceError.code === "string") {
+    res.status(serviceError.statusCode).json({
+      error: {
+        code: serviceError.code,
+        message: err.message,
+      },
+    });
+    return;
+  }
+
   res.status(500).json({
-    error: "Internal Server Error",
-    message: process.env.NODE_ENV === "development" ? err.message : undefined,
+    error: {
+      code: "INTERNAL_ERROR",
+      message: "An unexpected error occurred",
+    },
   });
 }
