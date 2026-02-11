@@ -4,7 +4,9 @@
 
 PostgreSQL database for a multi-vendor medical supplies marketplace. All tables use UUID primary keys with `gen_random_uuid()` and automatic `updated_at` timestamps via trigger.
 
-**Migration order:** 000 → 001 → 002 → ... → 011 (FK dependencies are satisfied sequentially).
+**Migration order:** 000 → 001 → 002 → ... → 013 (FK dependencies are satisfied sequentially).
+
+**Note:** `commission_rate` is stored as a percentage everywhere (15.00 = 15%), not a decimal fraction.
 
 ---
 
@@ -43,23 +45,56 @@ Extended profile for users with role = 'supplier'.
 | user_id | UUID | UNIQUE, NOT NULL, FK → users(id) ON DELETE CASCADE |
 | business_name | VARCHAR | NOT NULL |
 | tax_id | VARCHAR | nullable |
-| business_type | VARCHAR | nullable |
-| address | TEXT | nullable |
+| business_type | VARCHAR(100) | nullable |
+| address | JSONB | DEFAULT '{}' |
 | phone | VARCHAR | nullable |
-| commission_rate | DECIMAL(5,4) | NOT NULL, DEFAULT 0.1500, CHECK > 0 AND <= 1 |
-| status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'approved', 'suspended', 'rejected') |
-| banking_info | JSONB | DEFAULT '{}' |
+| contact_name | VARCHAR(255) | nullable |
+| contact_email | VARCHAR(255) | nullable |
+| commission_rate | NUMERIC(5,2) | NOT NULL, DEFAULT 15.00, CHECK >= 0 AND <= 100 |
+| status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'under_review', 'approved', 'rejected', 'needs_revision', 'suspended') |
+| bank_account_info | JSONB | DEFAULT '{}' |
 | product_categories | TEXT[] | nullable |
-| documents | JSONB | DEFAULT '[]' |
+| rejection_reason | TEXT | nullable |
+| current_balance | NUMERIC(12,2) | NOT NULL, DEFAULT 0.00 |
 | years_in_business | INTEGER | nullable |
 | approved_at | TIMESTAMPTZ | nullable |
 | approved_by | UUID | FK → users(id), nullable |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 
-**Commission rates:** Default 15% (0.1500), high-volume 12% (0.1200), premium category 18% (0.1800).
+**Commission rates:** Stored as percentage — Default 15% (15.00), high-volume 12% (12.00), premium category 18% (18.00).
+
+**Address JSON shape:** `{"street": "...", "city": "...", "state": "...", "zip": "...", "country": "US"}`
+
+**Bank account info JSON shape:** `{"bank_name": "...", "account_type": "checking", "routing_number_last4": "1234", "account_number_last4": "5678"}`
 
 **Trigger:** `set_suppliers_updated_at`
+
+---
+
+### 2a. supplier_documents
+
+Documents uploaded by suppliers for verification (business license, insurance, tax docs, W9).
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() |
+| supplier_id | UUID | NOT NULL, FK → suppliers(id) ON DELETE CASCADE |
+| document_type | VARCHAR(50) | NOT NULL, CHECK IN ('business_license', 'insurance_certificate', 'tax_document', 'w9', 'other') |
+| file_name | VARCHAR(255) | NOT NULL |
+| file_size | INTEGER | nullable |
+| mime_type | VARCHAR(100) | nullable |
+| storage_path | TEXT | NOT NULL |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'approved', 'rejected') |
+| rejection_reason | TEXT | nullable — admin provides reason per rejected document |
+| review_notes | TEXT | nullable |
+| uploaded_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
+| reviewed_at | TIMESTAMPTZ | nullable |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
+
+**Indexes:** `idx_supplier_docs_supplier_id`, `idx_supplier_docs_type`, `idx_supplier_docs_status`
+
+**Trigger:** `set_supplier_documents_updated_at`
 
 ---
 
@@ -165,8 +200,13 @@ Individual line items within an order.
 | unit_price | DECIMAL(10,2) | NOT NULL |
 | subtotal | DECIMAL(10,2) | NOT NULL |
 | fulfillment_status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded') |
+| shipped_at | TIMESTAMPTZ | nullable — when the item was shipped |
+| tracking_number | VARCHAR(100) | nullable — carrier tracking number |
+| carrier | VARCHAR(50) | nullable — shipping carrier name |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
+
+**Shipping columns** support Flow 6 (Supplier Order Fulfillment): carrier selection, tracking number, ship date.
 
 **Trigger:** `set_order_items_updated_at`
 
@@ -204,15 +244,19 @@ Per-line-item commission tracking. One commission entry per order_item.
 | order_item_id | UUID | UNIQUE, NOT NULL, FK → order_items(id) |
 | supplier_id | UUID | NOT NULL, FK → suppliers(id) |
 | sale_amount | DECIMAL(10,2) | NOT NULL |
-| commission_rate | DECIMAL(5,4) | NOT NULL |
+| commission_rate | NUMERIC(5,2) | NOT NULL, CHECK >= 0 AND <= 100 |
 | commission_amount | DECIMAL(10,2) | NOT NULL |
-| platform_amount | DECIMAL(10,2) | NOT NULL |
+| platform_amount | DECIMAL(10,2) | NOT NULL — same as commission_amount |
 | supplier_payout | DECIMAL(10,2) | NOT NULL |
-| payout_status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'processing', 'paid', 'failed') |
+| supplier_amount | NUMERIC(12,2) | nullable — sale_amount minus commission_amount |
+| status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'confirmed', 'paid', 'cancelled') |
+| confirmed_at | TIMESTAMPTZ | nullable — when commission is locked in (item shipped) |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 
-**Calculation:** `commission_amount = sale_amount * commission_rate`, `supplier_payout = sale_amount - commission_amount`
+**Calculation:** `commission_amount = sale_amount * (commission_rate / 100)`, `supplier_payout = sale_amount - commission_amount`
+
+**Note:** `commission_rate` is stored as percentage (15.00 = 15%). Column was renamed from `payout_status` to `status` in migration 013.
 
 **Trigger:** `set_commissions_updated_at`
 
@@ -236,10 +280,14 @@ Monthly supplier payout records.
 | early_payout_fee | DECIMAL(10,2) | DEFAULT 0 |
 | transaction_ref | VARCHAR | nullable |
 | invoice_url | VARCHAR | nullable |
+| items_count | INTEGER | NOT NULL, DEFAULT 0 |
+| payout_method | VARCHAR(50) | DEFAULT 'ach_transfer' — ACH bank transfer for MVP |
+| scheduled_at | TIMESTAMPTZ | nullable — 15th of each month per Flow 12 |
+| processed_at | TIMESTAMPTZ | nullable — when payout was actually executed |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 
-**Schedule:** Monthly on the 15th, minimum $50 threshold. Early payout incurs 2.5% fee.
+**Schedule:** Monthly on the 15th, minimum $50 threshold. Early payout incurs 2.5% fee. Default payout method is ACH bank transfer.
 
 **Trigger:** `set_payouts_updated_at`
 
@@ -247,7 +295,7 @@ Monthly supplier payout records.
 
 ## Indexes
 
-All indexes are created in `migrations/011_create_indexes.sql`.
+Indexes are created in `migrations/011_create_indexes.sql` and `migrations/013_align_supplier_schema.sql`.
 
 | Table | Index | Type | Column(s) / Expression |
 |-------|-------|------|------------------------|
@@ -256,6 +304,8 @@ All indexes are created in `migrations/011_create_indexes.sql`.
 | users | idx_users_status | B-tree | status |
 | suppliers | idx_suppliers_user_id | B-tree | user_id |
 | suppliers | idx_suppliers_status | B-tree | status |
+| suppliers | idx_suppliers_business_name | B-tree | business_name |
+| suppliers | idx_suppliers_created_at | B-tree | created_at DESC |
 | products | idx_products_supplier_id | B-tree | supplier_id |
 | products | idx_products_category | B-tree | category |
 | products | idx_products_status | B-tree | status |
@@ -275,8 +325,11 @@ All indexes are created in `migrations/011_create_indexes.sql`.
 | payments | idx_payments_order_id | B-tree | order_id |
 | payments | idx_payments_stripe_payment_intent_id | B-tree | stripe_payment_intent_id |
 | payments | idx_payments_status | B-tree | status |
+| supplier_documents | idx_supplier_docs_supplier_id | B-tree | supplier_id |
+| supplier_documents | idx_supplier_docs_type | B-tree | document_type |
+| supplier_documents | idx_supplier_docs_status | B-tree | status |
 | commissions | idx_commissions_supplier_id | B-tree | supplier_id |
-| commissions | idx_commissions_payout_status | B-tree | payout_status |
+| commissions | idx_commissions_payout_status | B-tree | status (renamed from payout_status) |
 | payouts | idx_payouts_supplier_id | B-tree | supplier_id |
 | payouts | idx_payouts_status | B-tree | status |
 | payouts | idx_payouts_payout_date | B-tree | payout_date |
@@ -287,6 +340,7 @@ All indexes are created in `migrations/011_create_indexes.sql`.
 
 ```
 users 1──1 suppliers          (user_id, ON DELETE CASCADE)
+suppliers 1──N supplier_documents (supplier_id, ON DELETE CASCADE)
 suppliers 1──N products       (supplier_id, ON DELETE CASCADE)
 users 1──N carts              (customer_id)
 carts 1──N cart_items          (cart_id, ON DELETE CASCADE)
@@ -338,6 +392,14 @@ All helper functions use `SECURITY DEFINER` and `STABLE` to ensure they run with
 | `suppliers_select_own` | SELECT | `user_id = auth.uid()` — suppliers see their own profile |
 | `suppliers_update_own` | UPDATE | `user_id = auth.uid()` — suppliers edit their own profile |
 | `suppliers_admin_all` | ALL | `is_admin()` — admins have full access |
+
+#### supplier_documents
+
+| Policy | Operation | Rule |
+|--------|-----------|------|
+| `supplier_documents_supplier_select` | SELECT | `supplier_id IN (SELECT id FROM suppliers WHERE user_id = auth.uid())` — suppliers see their own documents |
+| `supplier_documents_supplier_insert` | INSERT | `supplier_id IN (SELECT id FROM suppliers WHERE user_id = auth.uid())` — suppliers upload their own documents |
+| `supplier_documents_admin_all` | ALL | `EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')` — admins have full access |
 
 #### products
 
@@ -414,6 +476,7 @@ All helper functions use `SECURITY DEFINER` and `STABLE` to ensure they run with
 | Own user profile | Read/Update | Read/Update | Full |
 | Other user profiles | No | No | Full |
 | Supplier profile | No | Own only (R/U) | Full |
+| Supplier documents | No | Own only (R/Insert) | Full |
 | Products (active) | Read | Read | Full |
 | Products (draft/inactive) | No | Own only | Full |
 | Products (create/edit) | No | Own only | Full |
@@ -445,3 +508,4 @@ All helper functions use `SECURITY DEFINER` and `STABLE` to ensure they run with
 | 010_create_payouts.sql | Payouts table + trigger |
 | 011_create_indexes.sql | All performance indexes |
 | 012_create_rls_policies.sql | RLS helper functions, enable RLS on all tables, all access policies |
+| 013_align_supplier_schema.sql | Align supplier schema: alter suppliers (JSONB address, percentage commission_rate, new columns), create supplier_documents, add shipping columns to order_items, update commissions (rename payout_status → status, add supplier_amount), add payout columns |
