@@ -46,6 +46,7 @@ let supplierBId: string;
 let productXId: string;
 let productYId: string;
 let productZId: string;
+let productWId: string; // Supplier B's draft product
 
 // User-scoped Supabase clients
 let clientA: SupabaseClient;
@@ -265,6 +266,27 @@ beforeAll(async () => {
   }
   productZId = productZData.id;
 
+  // Product W - belongs to Supplier B, draft (for testing isolation)
+  const { data: productWData, error: productWError } = await supabaseAdmin
+    .from("products")
+    .insert({
+      supplier_id: supplierBId,
+      name: "Product W",
+      sku: "SKU-W-004",
+      price: 175.0,
+      stock_quantity: 15,
+      category: "Surgical Supplies",
+      status: "draft",
+      is_deleted: false,
+    })
+    .select("id")
+    .single();
+
+  if (productWError || !productWData) {
+    throw new Error(`Failed to create product W: ${productWError?.message}`);
+  }
+  productWId = productWData.id;
+
   // ============================================
   // Sign in as each user to get access tokens
   // ============================================
@@ -332,7 +354,10 @@ afterAll(async () => {
   // ============================================
 
   // Delete products
-  await supabaseAdmin.from("products").delete().in("id", [productXId, productYId, productZId]);
+  await supabaseAdmin
+    .from("products")
+    .delete()
+    .in("id", [productXId, productYId, productZId, productWId]);
 
   // Delete suppliers
   await supabaseAdmin.from("suppliers").delete().in("id", [supplierAId, supplierBId]);
@@ -364,17 +389,25 @@ describeOrSkip("Supplier Data Isolation", () => {
     expect(data).toEqual([]); // RLS should filter out Supplier B's data
   });
 
-  test("Supplier A sees only own products", async () => {
+  test("Supplier A sees own products and active products from others", async () => {
     const { data, error } = await clientA.from("products").select("*");
 
     expect(error).toBeNull();
     expect(data).toBeDefined();
 
-    // Supplier A should see Product X and Z (both owned by A)
+    // RLS uses OR logic for multiple SELECT policies:
+    // - products_select_active: any authenticated user sees active products
+    // - products_supplier_select_own: suppliers see all their own products
+    // So Supplier A should see:
+    // - Product X (own, active) ✓
+    // - Product Z (own, draft) ✓
+    // - Product Y (Supplier B, active) ✓
+    // - Product W (Supplier B, draft) ✗ - key security check
     const productIds = data!.map((p) => p.id);
     expect(productIds).toContain(productXId);
     expect(productIds).toContain(productZId);
-    expect(productIds).not.toContain(productYId); // Should NOT see Product Y (owned by B)
+    expect(productIds).toContain(productYId); // CAN see - Product Y is active
+    expect(productIds).not.toContain(productWId); // CANNOT see - Product W is draft and owned by B
   });
 
   test("Supplier A cannot update Supplier B product", async () => {
@@ -415,11 +448,12 @@ describeOrSkip("Customer Access", () => {
     expect(error).toBeNull();
     expect(data).toBeDefined();
 
-    // Customer should see Product X and Y (both active)
+    // Customer should see Product X and Y (both active), not drafts Z or W
     const productIds = data!.map((p) => p.id);
     expect(productIds).toContain(productXId);
     expect(productIds).toContain(productYId);
     expect(productIds).not.toContain(productZId); // Should NOT see Product Z (draft)
+    expect(productIds).not.toContain(productWId); // Should NOT see Product W (draft)
 
     // All returned products should be active
     data!.forEach((product) => {
@@ -455,10 +489,11 @@ describeOrSkip("Admin Access", () => {
     expect(error).toBeNull();
     expect(data).toBeDefined();
 
-    // Admin should see all products including Product Z (draft)
+    // Admin should see all products including drafts Z and W
     const productIds = data!.map((p) => p.id);
     expect(productIds).toContain(productXId);
     expect(productIds).toContain(productYId);
     expect(productIds).toContain(productZId); // Admin CAN see draft products
+    expect(productIds).toContain(productWId); // Admin CAN see all suppliers' drafts
   });
 });
