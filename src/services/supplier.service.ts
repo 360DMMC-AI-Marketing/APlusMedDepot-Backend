@@ -1,6 +1,12 @@
 import { supabaseAdmin } from "../config/supabase";
-import type { SupplierRegistrationRequest, SupplierResponse } from "../types/supplier.types";
-import { conflict, AppError } from "../utils/errors";
+import type {
+  SupplierRegistrationRequest,
+  SupplierResponse,
+  SupplierDetailResponse,
+  SupplierUpdateRequest,
+  SupplierDocument,
+} from "../types/supplier.types";
+import { conflict, AppError, notFound, badRequest } from "../utils/errors";
 
 type SupplierRow = {
   id: string;
@@ -12,8 +18,52 @@ type SupplierRow = {
   created_at: string;
 };
 
+type SupplierDetailRow = {
+  id: string;
+  user_id: string;
+  business_name: string;
+  business_type: string | null;
+  tax_id: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  phone: string | null;
+  address: Record<string, string> | null;
+  bank_account_info: Record<string, string> | null;
+  product_categories: string[] | null;
+  commission_rate: number;
+  status: string;
+  rejection_reason: string | null;
+  current_balance: number;
+  years_in_business: number | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SupplierDocumentRow = {
+  id: string;
+  supplier_id: string;
+  document_type: string;
+  file_name: string;
+  file_size: number | null;
+  mime_type: string | null;
+  storage_path: string;
+  status: string;
+  rejection_reason: string | null;
+  review_notes: string | null;
+  uploaded_at: string;
+  reviewed_at: string | null;
+};
+
 const SUPPLIER_SELECT_FIELDS =
   "id, user_id, business_name, business_type, status, commission_rate, created_at";
+
+const SUPPLIER_DETAIL_FIELDS =
+  "id, user_id, business_name, business_type, tax_id, contact_name, contact_email, phone, address, bank_account_info, product_categories, commission_rate, status, rejection_reason, current_balance, years_in_business, approved_at, approved_by, created_at, updated_at";
+
+const DOCUMENT_SELECT_FIELDS =
+  "id, supplier_id, document_type, file_name, file_size, mime_type, storage_path, status, rejection_reason, review_notes, uploaded_at, reviewed_at";
 
 const DOCUMENT_BUCKET = "supplier-documents";
 const ALLOWED_DOCUMENT_MIME_TYPES = [
@@ -154,5 +204,162 @@ export class SupplierService {
     }
 
     return toSupplierResponse(supplierRow);
+  }
+
+  static async getProfile(supplierId: string): Promise<SupplierDetailResponse> {
+    // Fetch full supplier record
+    const { data: supplierData, error: supplierError } = await supabaseAdmin
+      .from("suppliers")
+      .select(SUPPLIER_DETAIL_FIELDS)
+      .eq("id", supplierId)
+      .single();
+
+    if (supplierError || !supplierData) {
+      throw notFound("Supplier");
+    }
+
+    const supplier = supplierData as unknown as SupplierDetailRow;
+
+    // Fetch supplier documents
+    const { data: documentsData, error: documentsError } = await supabaseAdmin
+      .from("supplier_documents")
+      .select(DOCUMENT_SELECT_FIELDS)
+      .eq("supplier_id", supplierId);
+
+    if (documentsError) {
+      throw new AppError(documentsError.message, 500, "DATABASE_ERROR");
+    }
+
+    const documentRows = (documentsData as unknown as SupplierDocumentRow[]) ?? [];
+
+    // Generate signed URLs for documents
+    const documents: SupplierDocument[] = await Promise.all(
+      documentRows.map(async (doc) => {
+        let signedUrl: string | undefined;
+        try {
+          const { data: urlData } = await supabaseAdmin.storage
+            .from(DOCUMENT_BUCKET)
+            .createSignedUrl(doc.storage_path, 3600);
+          signedUrl = urlData?.signedUrl;
+        } catch {
+          signedUrl = undefined;
+        }
+
+        return {
+          id: doc.id,
+          supplierId: doc.supplier_id,
+          documentType: doc.document_type,
+          filePath: doc.storage_path,
+          fileName: doc.file_name,
+          fileSize: doc.file_size,
+          mimeType: doc.mime_type,
+          status: doc.status,
+          rejectionReason: doc.rejection_reason,
+          reviewNotes: doc.review_notes,
+          uploadedAt: doc.uploaded_at,
+          reviewedAt: doc.reviewed_at,
+          signedUrl,
+        };
+      }),
+    );
+
+    return {
+      id: supplier.id,
+      userId: supplier.user_id,
+      businessName: supplier.business_name,
+      businessType: supplier.business_type,
+      taxId: supplier.tax_id,
+      contactName: supplier.contact_name,
+      contactEmail: supplier.contact_email,
+      phone: supplier.phone,
+      address: supplier.address,
+      bankAccountInfo: supplier.bank_account_info,
+      productCategories: supplier.product_categories,
+      commissionRate: supplier.commission_rate,
+      status: supplier.status,
+      rejectionReason: supplier.rejection_reason,
+      currentBalance: supplier.current_balance,
+      yearsInBusiness: supplier.years_in_business,
+      approvedAt: supplier.approved_at,
+      approvedBy: supplier.approved_by,
+      createdAt: supplier.created_at,
+      updatedAt: supplier.updated_at,
+      documents,
+    };
+  }
+
+  static async updateProfile(
+    supplierId: string,
+    data: Partial<SupplierUpdateRequest>,
+  ): Promise<SupplierResponse> {
+    // Blocked fields that must NEVER be updated
+    const blockedFields = [
+      "status",
+      "commission_rate",
+      "user_id",
+      "id",
+      "approved_at",
+      "approved_by",
+      "current_balance",
+      "commissionRate",
+      "userId",
+      "approvedAt",
+      "approvedBy",
+      "currentBalance",
+    ];
+
+    // Check if any blocked field is in the data
+    for (const field of blockedFields) {
+      if (field in data) {
+        throw badRequest(`Cannot update ${field}`);
+      }
+    }
+
+    // Map camelCase to snake_case
+    const updateData: Record<string, unknown> = {};
+
+    if (data.businessName !== undefined) {
+      updateData.business_name = data.businessName;
+    }
+    if (data.businessType !== undefined) {
+      updateData.business_type = data.businessType;
+    }
+    if (data.contactName !== undefined) {
+      updateData.contact_name = data.contactName;
+    }
+    if (data.contactEmail !== undefined) {
+      updateData.contact_email = data.contactEmail;
+    }
+    if (data.phone !== undefined) {
+      updateData.phone = data.phone;
+    }
+    if (data.address !== undefined) {
+      updateData.address = data.address;
+    }
+    if (data.bankAccountInfo !== undefined) {
+      updateData.bank_account_info = data.bankAccountInfo;
+    }
+    if (data.productCategories !== undefined) {
+      updateData.product_categories = data.productCategories;
+    }
+
+    // If no fields to update, throw error
+    if (Object.keys(updateData).length === 0) {
+      throw badRequest("No fields to update");
+    }
+
+    // Update supplier
+    const { data: updatedData, error } = await supabaseAdmin
+      .from("suppliers")
+      .update(updateData)
+      .eq("id", supplierId)
+      .select(SUPPLIER_SELECT_FIELDS)
+      .single();
+
+    if (error || !updatedData) {
+      throw new AppError(error?.message ?? "Supplier update failed", 500, "DATABASE_ERROR");
+    }
+
+    return toSupplierResponse(updatedData as unknown as SupplierRow);
   }
 }
