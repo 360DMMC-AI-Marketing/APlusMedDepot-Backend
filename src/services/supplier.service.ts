@@ -7,6 +7,7 @@ import type {
   SupplierDocument,
 } from "../types/supplier.types";
 import { conflict, AppError, notFound, badRequest } from "../utils/errors";
+import { SupplierEmailService } from "./supplierEmail.service";
 
 type SupplierRow = {
   id: string;
@@ -202,6 +203,11 @@ export class SupplierService {
         }
       }
     }
+
+    // Send application received email (fire-and-forget)
+    SupplierEmailService.sendApplicationReceived(data.contactEmail, data.businessName).catch(
+      () => {},
+    );
 
     return toSupplierResponse(supplierRow);
   }
