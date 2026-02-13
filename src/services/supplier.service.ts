@@ -368,4 +368,223 @@ export class SupplierService {
 
     return toSupplierResponse(updatedData as unknown as SupplierRow);
   }
+
+  static async uploadDocument(
+    supplierId: string,
+    file: Express.Multer.File,
+    documentType: string,
+  ): Promise<SupplierDocument> {
+    // Validate document type
+    const validTypes = ["business_license", "insurance", "tax_document", "certification", "other"];
+    if (!validTypes.includes(documentType)) {
+      throw badRequest(
+        `Invalid document type. Allowed: ${validTypes.join(", ")}. Received: ${documentType}`,
+      );
+    }
+
+    // Ensure bucket exists
+    await this.ensureDocumentBucket();
+
+    // Sanitize filename
+    const sanitized = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const ext = sanitized.split(".").pop() || "bin";
+    const timestamp = Date.now();
+
+    // Storage path: {supplierId}/{documentType}_{timestamp}.{ext}
+    const storagePath = `${supplierId}/${documentType}_${timestamp}.${ext}`;
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(DOCUMENT_BUCKET)
+      .upload(storagePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new AppError(uploadError.message, 500, "STORAGE_ERROR");
+    }
+
+    // Insert document record
+    const { data: documentData, error: docError } = await supabaseAdmin
+      .from("supplier_documents")
+      .insert({
+        supplier_id: supplierId,
+        document_type: documentType,
+        file_name: file.originalname,
+        file_size: file.size,
+        mime_type: file.mimetype,
+        storage_path: storagePath,
+        status: "pending",
+      })
+      .select(DOCUMENT_SELECT_FIELDS)
+      .single();
+
+    if (docError || !documentData) {
+      throw new AppError(
+        docError?.message ?? "Document record insert failed",
+        500,
+        "DATABASE_ERROR",
+      );
+    }
+
+    const doc = documentData as unknown as SupplierDocumentRow;
+
+    // Generate signed URL
+    let signedUrl: string | undefined;
+    try {
+      const { data: urlData } = await supabaseAdmin.storage
+        .from(DOCUMENT_BUCKET)
+        .createSignedUrl(doc.storage_path, 3600);
+      signedUrl = urlData?.signedUrl;
+    } catch {
+      signedUrl = undefined;
+    }
+
+    return {
+      id: doc.id,
+      supplierId: doc.supplier_id,
+      documentType: doc.document_type,
+      filePath: doc.storage_path,
+      fileName: doc.file_name,
+      fileSize: doc.file_size,
+      mimeType: doc.mime_type,
+      status: doc.status,
+      rejectionReason: doc.rejection_reason,
+      reviewNotes: doc.review_notes,
+      uploadedAt: doc.uploaded_at,
+      reviewedAt: doc.reviewed_at,
+      signedUrl,
+    };
+  }
+
+  static async listDocuments(supplierId: string): Promise<SupplierDocument[]> {
+    // Fetch all documents for this supplier
+    const { data: documentsData, error: documentsError } = await supabaseAdmin
+      .from("supplier_documents")
+      .select(DOCUMENT_SELECT_FIELDS)
+      .eq("supplier_id", supplierId);
+
+    if (documentsError) {
+      throw new AppError(documentsError.message, 500, "DATABASE_ERROR");
+    }
+
+    const documentRows = (documentsData as unknown as SupplierDocumentRow[]) ?? [];
+
+    // Generate signed URLs for documents
+    const documents: SupplierDocument[] = await Promise.all(
+      documentRows.map(async (doc) => {
+        let signedUrl: string | undefined;
+        try {
+          const { data: urlData } = await supabaseAdmin.storage
+            .from(DOCUMENT_BUCKET)
+            .createSignedUrl(doc.storage_path, 3600);
+          signedUrl = urlData?.signedUrl;
+        } catch {
+          signedUrl = undefined;
+        }
+
+        return {
+          id: doc.id,
+          supplierId: doc.supplier_id,
+          documentType: doc.document_type,
+          filePath: doc.storage_path,
+          fileName: doc.file_name,
+          fileSize: doc.file_size,
+          mimeType: doc.mime_type,
+          status: doc.status,
+          rejectionReason: doc.rejection_reason,
+          reviewNotes: doc.review_notes,
+          uploadedAt: doc.uploaded_at,
+          reviewedAt: doc.reviewed_at,
+          signedUrl,
+        };
+      }),
+    );
+
+    return documents;
+  }
+
+  static async deleteDocument(supplierId: string, documentId: string): Promise<void> {
+    // Fetch the document and verify it belongs to this supplier
+    const { data: documentData, error: fetchError } = await supabaseAdmin
+      .from("supplier_documents")
+      .select(DOCUMENT_SELECT_FIELDS)
+      .eq("id", documentId)
+      .maybeSingle();
+
+    if (fetchError) {
+      throw new AppError(fetchError.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!documentData) {
+      throw notFound("Document");
+    }
+
+    const doc = documentData as unknown as SupplierDocumentRow;
+
+    // Verify ownership
+    if (doc.supplier_id !== supplierId) {
+      throw notFound("Document");
+    }
+
+    // Delete file from Supabase Storage
+    const { error: storageError } = await supabaseAdmin.storage
+      .from(DOCUMENT_BUCKET)
+      .remove([doc.storage_path]);
+
+    if (storageError) {
+      throw new AppError(storageError.message, 500, "STORAGE_ERROR");
+    }
+
+    // Delete document record
+    const { error: deleteError } = await supabaseAdmin
+      .from("supplier_documents")
+      .delete()
+      .eq("id", documentId);
+
+    if (deleteError) {
+      throw new AppError(deleteError.message, 500, "DATABASE_ERROR");
+    }
+  }
+
+  static async resubmitApplication(supplierId: string): Promise<SupplierResponse> {
+    // Fetch current supplier record
+    const { data: supplierData, error: fetchError } = await supabaseAdmin
+      .from("suppliers")
+      .select(SUPPLIER_SELECT_FIELDS)
+      .eq("id", supplierId)
+      .single();
+
+    if (fetchError || !supplierData) {
+      throw notFound("Supplier");
+    }
+
+    const supplier = supplierData as unknown as SupplierRow;
+
+    // Check if status is 'needs_revision'
+    if (supplier.status !== "needs_revision") {
+      throw badRequest(
+        `Can only resubmit when status is needs_revision. Current status: ${supplier.status}`,
+      );
+    }
+
+    // Update status from 'needs_revision' to 'pending'
+    const { data: updatedData, error: updateError } = await supabaseAdmin
+      .from("suppliers")
+      .update({ status: "pending" })
+      .eq("id", supplierId)
+      .select(SUPPLIER_SELECT_FIELDS)
+      .single();
+
+    if (updateError || !updatedData) {
+      throw new AppError(
+        updateError?.message ?? "Application resubmit failed",
+        500,
+        "DATABASE_ERROR",
+      );
+    }
+
+    return toSupplierResponse(updatedData as unknown as SupplierRow);
+  }
 }

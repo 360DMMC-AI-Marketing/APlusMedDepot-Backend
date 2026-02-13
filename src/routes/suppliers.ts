@@ -3,8 +3,8 @@ import { Router, Request, Response } from "express";
 import { SupplierController } from "../controllers/supplier.controller";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
-import { uploadDocuments } from "../middleware/upload";
-import { requireApprovedSupplier } from "../middleware/requireSupplier";
+import { uploadDocuments, uploadDocument } from "../middleware/upload";
+import { requireApprovedSupplier, requireAnySupplier } from "../middleware/requireSupplier";
 
 const router = Router();
 
@@ -107,6 +107,133 @@ router.put(
   authorize("supplier"),
   requireApprovedSupplier,
   SupplierController.updateProfile,
+);
+
+/**
+ * @openapi
+ * /suppliers/me/documents:
+ *   post:
+ *     summary: Upload a single document
+ *     tags: [Suppliers]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - documentType
+ *               - document
+ *             properties:
+ *               documentType:
+ *                 type: string
+ *                 enum: [business_license, insurance, tax_document, certification, other]
+ *               document:
+ *                 type: string
+ *                 format: binary
+ *                 description: Document file (PDF, DOC, DOCX, JPEG, PNG). Max 10MB.
+ *     responses:
+ *       201:
+ *         description: Document uploaded successfully
+ *       400:
+ *         description: Validation error or no file uploaded
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier profile required
+ */
+router.post(
+  "/me/documents",
+  authenticate,
+  authorize("supplier"),
+  requireAnySupplier,
+  uploadDocument,
+  SupplierController.uploadDocument,
+);
+
+/**
+ * @openapi
+ * /suppliers/me/documents:
+ *   get:
+ *     summary: List all documents for current supplier
+ *     tags: [Suppliers]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of documents with signed URLs
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier profile required
+ */
+router.get(
+  "/me/documents",
+  authenticate,
+  authorize("supplier"),
+  requireAnySupplier,
+  SupplierController.listDocuments,
+);
+
+/**
+ * @openapi
+ * /suppliers/me/documents/{documentId}:
+ *   delete:
+ *     summary: Delete a document
+ *     tags: [Suppliers]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       204:
+ *         description: Document deleted successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier profile required
+ *       404:
+ *         description: Document not found or not owned by supplier
+ */
+router.delete(
+  "/me/documents/:documentId",
+  authenticate,
+  authorize("supplier"),
+  requireAnySupplier,
+  SupplierController.deleteDocument,
+);
+
+/**
+ * @openapi
+ * /suppliers/me/resubmit:
+ *   put:
+ *     summary: Resubmit application (needs_revision → pending)
+ *     tags: [Suppliers]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Application resubmitted successfully
+ *       400:
+ *         description: Can only resubmit when status is needs_revision
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier profile required
+ */
+router.put(
+  "/me/resubmit",
+  authenticate,
+  authorize("supplier"),
+  requireAnySupplier,
+  SupplierController.resubmitApplication,
 );
 
 /**
