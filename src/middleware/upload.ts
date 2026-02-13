@@ -41,3 +41,17 @@ export const uploadDocuments = multer({
     }
   },
 }).array("documents", 5);
+
+export const uploadDocument = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_DOCUMENT_SIZE,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(badRequest("Invalid file type. Allowed: PDF, DOC, DOCX, JPEG, PNG"));
+    }
+  },
+}).single("document");

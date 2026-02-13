@@ -67,3 +67,15 @@ export const supplierUpdateSchema = z.object({
 });
 
 export type SupplierUpdateInput = z.infer<typeof supplierUpdateSchema>;
+
+export const documentUploadSchema = z.object({
+  documentType: z.enum(
+    ["business_license", "insurance", "tax_document", "certification", "other"],
+    {
+      message:
+        "Invalid document type. Allowed: business_license, insurance, tax_document, certification, other",
+    },
+  ),
+});
+
+export type DocumentUploadInput = z.infer<typeof documentUploadSchema>;
