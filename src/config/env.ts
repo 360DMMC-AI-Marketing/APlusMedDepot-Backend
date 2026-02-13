@@ -1,7 +1,13 @@
 import { z } from "zod";
 import dotenv from "dotenv";
+import path from "path";
 
-dotenv.config();
+// Detect test environment: check NODE_ENV or if running under Jest
+const isTestEnv = process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID !== undefined;
+
+// Load .env.test in test environment, otherwise load .env
+const envFile = isTestEnv ? ".env.test" : ".env";
+dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
