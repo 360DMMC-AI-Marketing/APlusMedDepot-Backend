@@ -15,6 +15,7 @@ import orderRoutes from "./routes/orders";
 import paymentRoutes from "./routes/payments";
 import supplierRoutes from "./routes/suppliers";
 import adminRoutes from "./routes/admin";
+import adminSupplierRoutes from "./routes/adminSuppliers";
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/suppliers", adminSupplierRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
