@@ -4,6 +4,7 @@ import type {
   ListSuppliersQueryInput,
   CommissionQueryInput,
 } from "../validators/adminSupplier.validator";
+import { SupplierEmailService } from "./supplierEmail.service";
 
 type SupplierRow = {
   id: string;
@@ -255,7 +256,43 @@ export class AdminSupplierService {
       throw new AppError(error?.message ?? "Supplier update failed", 500, "DATABASE_ERROR");
     }
 
-    return toSupplier(data as unknown as SupplierRow);
+    const supplierRow = data as unknown as SupplierRow;
+
+    // Send email notification based on new status (fire-and-forget)
+    if (supplierRow.contact_email) {
+      const email = supplierRow.contact_email;
+      const businessName = supplierRow.business_name;
+
+      switch (newStatus) {
+        case "under_review":
+          SupplierEmailService.sendApplicationUnderReview(email, businessName).catch(() => {});
+          break;
+        case "approved":
+          SupplierEmailService.sendApplicationApproved(
+            email,
+            businessName,
+            supplierRow.commission_rate,
+          ).catch(() => {});
+          break;
+        case "rejected":
+          if (supplierRow.rejection_reason) {
+            SupplierEmailService.sendApplicationRejected(
+              email,
+              businessName,
+              supplierRow.rejection_reason,
+            ).catch(() => {});
+          }
+          break;
+        case "needs_revision":
+          SupplierEmailService.sendRevisionRequested(email, businessName).catch(() => {});
+          break;
+        case "suspended":
+          SupplierEmailService.sendAccountSuspended(email, businessName).catch(() => {});
+          break;
+      }
+    }
+
+    return toSupplier(supplierRow);
   }
 
   static async getCommissionReport(query: CommissionQueryInput) {
