@@ -17,3 +17,27 @@ export const uploadSingle = multer({
     }
   },
 }).single("image");
+
+const ALLOWED_DOCUMENT_MIME_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/jpeg",
+  "image/png",
+];
+const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024; // 10MB
+
+export const uploadDocuments = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_DOCUMENT_SIZE,
+    files: 5,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(badRequest("Invalid file type. Allowed: PDF, DOC, DOCX, JPEG, PNG"));
+    }
+  },
+}).array("documents", 5);

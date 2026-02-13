@@ -1,6 +1,139 @@
 import { Router, Request, Response } from "express";
 
+import { SupplierController } from "../controllers/supplier.controller";
+import { authenticate } from "../middleware/auth";
+import { authorize } from "../middleware/rbac";
+import { uploadDocuments } from "../middleware/upload";
+
 const router = Router();
+
+/**
+ * @openapi
+ * /suppliers/register:
+ *   post:
+ *     summary: Submit supplier registration with business details and documents
+ *     tags: [Suppliers]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - businessName
+ *               - taxId
+ *               - contactName
+ *               - contactEmail
+ *               - phone
+ *               - address
+ *               - bankAccountInfo
+ *               - productCategories
+ *             properties:
+ *               businessName:
+ *                 type: string
+ *                 maxLength: 255
+ *               businessType:
+ *                 type: string
+ *                 maxLength: 100
+ *               taxId:
+ *                 type: string
+ *                 maxLength: 50
+ *               contactName:
+ *                 type: string
+ *                 maxLength: 255
+ *               contactEmail:
+ *                 type: string
+ *                 format: email
+ *               phone:
+ *                 type: string
+ *                 maxLength: 20
+ *               address:
+ *                 type: object
+ *                 required: [street, city, state, zip]
+ *                 properties:
+ *                   street:
+ *                     type: string
+ *                   city:
+ *                     type: string
+ *                   state:
+ *                     type: string
+ *                   zip:
+ *                     type: string
+ *                   country:
+ *                     type: string
+ *                     default: US
+ *               bankAccountInfo:
+ *                 type: object
+ *                 required: [bankName, accountNumber, routingNumber]
+ *                 properties:
+ *                   bankName:
+ *                     type: string
+ *                   accountNumber:
+ *                     type: string
+ *                   routingNumber:
+ *                     type: string
+ *               productCategories:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *                 maxItems: 10
+ *               documents:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 maxItems: 5
+ *                 description: Upload up to 5 documents (PDF, DOC, DOCX, JPEG, PNG). Max 10MB each.
+ *     responses:
+ *       201:
+ *         description: Supplier registration submitted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 supplier:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     userId:
+ *                       type: string
+ *                       format: uuid
+ *                     businessName:
+ *                       type: string
+ *                     businessType:
+ *                       type: string
+ *                       nullable: true
+ *                     status:
+ *                       type: string
+ *                     commissionRate:
+ *                       type: number
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - user must have supplier role
+ *       409:
+ *         description: Supplier application already exists
+ */
+router.post(
+  "/register",
+  authenticate,
+  authorize("supplier"),
+  uploadDocuments,
+  SupplierController.register,
+);
 
 router.get("/", (_req: Request, res: Response) => {
   res.status(200).json({ message: "TODO: List all suppliers" });
