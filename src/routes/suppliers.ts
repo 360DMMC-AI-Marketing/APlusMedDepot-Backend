@@ -4,8 +4,110 @@ import { SupplierController } from "../controllers/supplier.controller";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
 import { uploadDocuments } from "../middleware/upload";
+import { requireApprovedSupplier } from "../middleware/requireSupplier";
 
 const router = Router();
+
+/**
+ * @openapi
+ * /suppliers/me:
+ *   get:
+ *     summary: Get current supplier's profile with documents
+ *     tags: [Suppliers]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Supplier profile with documents
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier must be approved
+ *       404:
+ *         description: Supplier not found
+ */
+router.get(
+  "/me",
+  authenticate,
+  authorize("supplier"),
+  requireApprovedSupplier,
+  SupplierController.getProfile,
+);
+
+/**
+ * @openapi
+ * /suppliers/me:
+ *   put:
+ *     summary: Update current supplier's profile
+ *     tags: [Suppliers]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               businessName:
+ *                 type: string
+ *                 maxLength: 255
+ *               businessType:
+ *                 type: string
+ *                 maxLength: 100
+ *               contactName:
+ *                 type: string
+ *                 maxLength: 255
+ *               contactEmail:
+ *                 type: string
+ *                 format: email
+ *               phone:
+ *                 type: string
+ *                 maxLength: 20
+ *               address:
+ *                 type: object
+ *                 properties:
+ *                   street:
+ *                     type: string
+ *                   city:
+ *                     type: string
+ *                   state:
+ *                     type: string
+ *                   zip:
+ *                     type: string
+ *                   country:
+ *                     type: string
+ *               bankAccountInfo:
+ *                 type: object
+ *                 properties:
+ *                   bankName:
+ *                     type: string
+ *                   accountNumber:
+ *                     type: string
+ *                   routingNumber:
+ *                     type: string
+ *               productCategories:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *                 maxItems: 10
+ *     responses:
+ *       200:
+ *         description: Supplier profile updated successfully
+ *       400:
+ *         description: Validation error or attempting to update blocked fields
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier must be approved
+ */
+router.put(
+  "/me",
+  authenticate,
+  authorize("supplier"),
+  requireApprovedSupplier,
+  SupplierController.updateProfile,
+);
 
 /**
  * @openapi
