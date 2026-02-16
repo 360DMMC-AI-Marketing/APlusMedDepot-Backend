@@ -35,6 +35,10 @@ jest.mock("../../src/services/storage.service", () => ({
   },
 }));
 
+jest.mock("../../src/services/cart.service", () => ({
+  CartService: {},
+}));
+
 jest.mock(
   "express-rate-limit",
   () => () => (_req: unknown, _res: unknown, next: () => void) => next(),
