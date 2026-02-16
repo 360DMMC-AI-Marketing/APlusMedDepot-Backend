@@ -12,6 +12,10 @@ jest.mock("../../src/services/storage.service", () => ({
   StorageService: {},
 }));
 
+jest.mock("../../src/services/cart.service", () => ({
+  CartService: {},
+}));
+
 import app from "../../src/index";
 
 describe("GET /health", () => {

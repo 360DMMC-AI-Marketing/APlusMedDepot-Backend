@@ -60,6 +60,7 @@ const setupEnv = (): void => {
   process.env.STRIPE_SECRET_KEY = "sk_test_123";
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_123";
   process.env.RESEND_API_KEY = "resend_key";
+  process.env.FROM_EMAIL = "orders@aplusmeddepot.com";
   process.env.JWT_SECRET = "x".repeat(32);
   process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
   process.env.NODE_ENV = "test";

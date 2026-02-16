@@ -16,6 +16,7 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_"),
   RESEND_API_KEY: z.string().default(""),
+  FROM_EMAIL: z.string().default(""),
   JWT_SECRET: z.string().min(32),
   DATABASE_URL: z.string().min(1),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
