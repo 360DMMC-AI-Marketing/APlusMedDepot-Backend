@@ -524,3 +524,377 @@ describe("OrderService.createOrder", () => {
     );
   });
 });
+
+// ── updateOrderStatus ───────────────────────────────────────────────
+
+describe("OrderService.updateOrderStatus", () => {
+  const ADMIN_ID = "user-admin-1";
+
+  function makeCurrentOrder(status: string) {
+    return { id: ORDER_ID, status };
+  }
+
+  function makeUpdatedOrderRow(status: string) {
+    return {
+      id: ORDER_ID,
+      order_number: "ORD-20260216-ABC12",
+      customer_id: USER_ID,
+      parent_order_id: null,
+      supplier_id: null,
+      total_amount: "32.48",
+      tax_amount: "2.48",
+      shipping_address: validAddress,
+      status,
+      payment_status: "pending",
+      payment_intent_id: null,
+      notes: null,
+      created_at: "2026-02-16T00:00:00Z",
+      updated_at: "2026-02-16T00:00:00Z",
+    };
+  }
+
+  it("updates status and inserts history record on valid transition", async () => {
+    const fetchChain = mockQuery({ data: makeCurrentOrder("pending_payment") });
+    const updateChain = mockQuery({ data: makeUpdatedOrderRow("payment_processing") });
+    const historyChain = mockQuery({ data: null });
+
+    mockFrom
+      .mockReturnValueOnce(fetchChain)
+      .mockReturnValueOnce(updateChain)
+      .mockReturnValueOnce(historyChain);
+
+    const result = await OrderService.updateOrderStatus(
+      ORDER_ID,
+      "payment_processing",
+      ADMIN_ID,
+      "Payment initiated",
+    );
+
+    expect(result.status).toBe("payment_processing");
+    expect(result.id).toBe(ORDER_ID);
+
+    // Verify history insert args
+    const historyInsertData = historyChain.insert.mock.calls[0][0];
+    expect(historyInsertData.order_id).toBe(ORDER_ID);
+    expect(historyInsertData.from_status).toBe("pending_payment");
+    expect(historyInsertData.to_status).toBe("payment_processing");
+    expect(historyInsertData.changed_by).toBe(ADMIN_ID);
+    expect(historyInsertData.reason).toBe("Payment initiated");
+  });
+
+  it("throws badRequest on invalid transition with allowed list", async () => {
+    const fetchChain = mockQuery({ data: makeCurrentOrder("pending_payment") });
+    mockFrom.mockReturnValueOnce(fetchChain);
+
+    await expect(OrderService.updateOrderStatus(ORDER_ID, "delivered", ADMIN_ID)).rejects.toThrow(
+      /Invalid status transition.*Allowed/,
+    );
+  });
+
+  it("throws notFound when order does not exist", async () => {
+    const fetchChain = mockQuery({ data: null, error: { message: "not found" } });
+    mockFrom.mockReturnValueOnce(fetchChain);
+
+    await expect(
+      OrderService.updateOrderStatus(ORDER_ID, "payment_processing", ADMIN_ID),
+    ).rejects.toThrow("Order not found");
+  });
+
+  it("stores reason when provided", async () => {
+    const fetchChain = mockQuery({ data: makeCurrentOrder("pending_payment") });
+    const updateChain = mockQuery({ data: makeUpdatedOrderRow("cancelled") });
+    const historyChain = mockQuery({ data: null });
+
+    mockFrom
+      .mockReturnValueOnce(fetchChain)
+      .mockReturnValueOnce(updateChain)
+      .mockReturnValueOnce(historyChain);
+
+    await OrderService.updateOrderStatus(ORDER_ID, "cancelled", ADMIN_ID, "Customer request");
+
+    const historyData = historyChain.insert.mock.calls[0][0];
+    expect(historyData.reason).toBe("Customer request");
+  });
+
+  it("stores null reason when omitted", async () => {
+    const fetchChain = mockQuery({ data: makeCurrentOrder("pending_payment") });
+    const updateChain = mockQuery({ data: makeUpdatedOrderRow("payment_processing") });
+    const historyChain = mockQuery({ data: null });
+
+    mockFrom
+      .mockReturnValueOnce(fetchChain)
+      .mockReturnValueOnce(updateChain)
+      .mockReturnValueOnce(historyChain);
+
+    await OrderService.updateOrderStatus(ORDER_ID, "payment_processing", ADMIN_ID);
+
+    const historyData = historyChain.insert.mock.calls[0][0];
+    expect(historyData.reason).toBeNull();
+  });
+
+  it("returns order with numeric amount conversions", async () => {
+    const fetchChain = mockQuery({ data: makeCurrentOrder("pending_payment") });
+    const updateChain = mockQuery({ data: makeUpdatedOrderRow("payment_processing") });
+    const historyChain = mockQuery({ data: null });
+
+    mockFrom
+      .mockReturnValueOnce(fetchChain)
+      .mockReturnValueOnce(updateChain)
+      .mockReturnValueOnce(historyChain);
+
+    const result = await OrderService.updateOrderStatus(ORDER_ID, "payment_processing", ADMIN_ID);
+
+    expect(result.total_amount).toBe(32.48);
+    expect(result.tax_amount).toBe(2.48);
+  });
+});
+
+// ── updateMasterOrderStatus ─────────────────────────────────────────
+
+describe("OrderService.updateMasterOrderStatus", () => {
+  const CHANGED_BY = "user-supplier-1";
+
+  function makeItems(statuses: string[]) {
+    return statuses.map((s) => ({ fulfillment_status: s }));
+  }
+
+  function setupMasterMocks(
+    currentStatus: string,
+    itemStatuses: string[],
+    expectUpdate: boolean,
+    newStatus?: string,
+  ) {
+    // 1. orders SELECT (current order)
+    const orderFetchChain = mockQuery({ data: { id: ORDER_ID, status: currentStatus } });
+    // 2. order_items SELECT (fulfillment statuses)
+    const itemsFetchChain = mockQuery({ data: makeItems(itemStatuses) });
+
+    mockFrom.mockReturnValueOnce(orderFetchChain).mockReturnValueOnce(itemsFetchChain);
+
+    if (expectUpdate && newStatus) {
+      // updateOrderStatus internally calls: 3 more from() calls
+      const innerFetchChain = mockQuery({ data: { id: ORDER_ID, status: currentStatus } });
+      const innerUpdateChain = mockQuery({
+        data: {
+          id: ORDER_ID,
+          order_number: "ORD-20260216-ABC12",
+          customer_id: USER_ID,
+          parent_order_id: null,
+          supplier_id: null,
+          total_amount: "32.48",
+          tax_amount: "2.48",
+          shipping_address: validAddress,
+          status: newStatus,
+          payment_status: "pending",
+          payment_intent_id: null,
+          notes: null,
+          created_at: "2026-02-16T00:00:00Z",
+          updated_at: "2026-02-16T00:00:00Z",
+        },
+      });
+      const innerHistoryChain = mockQuery({ data: null });
+
+      mockFrom
+        .mockReturnValueOnce(innerFetchChain)
+        .mockReturnValueOnce(innerUpdateChain)
+        .mockReturnValueOnce(innerHistoryChain);
+    }
+  }
+
+  it("does not change status when all items are pending", async () => {
+    setupMasterMocks("awaiting_fulfillment", ["pending", "pending", "pending"], false);
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+
+    // Only 2 from() calls (fetch order + fetch items), no update
+    expect(mockFrom).toHaveBeenCalledTimes(2);
+  });
+
+  it("sets partially_shipped when 1 of 3 items shipped", async () => {
+    setupMasterMocks(
+      "awaiting_fulfillment",
+      ["shipped", "pending", "pending"],
+      true,
+      "partially_shipped",
+    );
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+
+    // 2 (master reads) + 3 (updateOrderStatus internals) = 5
+    expect(mockFrom).toHaveBeenCalledTimes(5);
+  });
+
+  it("sets partially_shipped when 2 of 3 items shipped", async () => {
+    setupMasterMocks(
+      "awaiting_fulfillment",
+      ["shipped", "shipped", "pending"],
+      true,
+      "partially_shipped",
+    );
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+    expect(mockFrom).toHaveBeenCalledTimes(5);
+  });
+
+  it("sets fully_shipped when all items shipped", async () => {
+    setupMasterMocks("partially_shipped", ["shipped", "shipped", "shipped"], true, "fully_shipped");
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+    expect(mockFrom).toHaveBeenCalledTimes(5);
+  });
+
+  it("sets delivered when all items delivered", async () => {
+    setupMasterMocks("fully_shipped", ["delivered", "delivered", "delivered"], true, "delivered");
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+    expect(mockFrom).toHaveBeenCalledTimes(5);
+  });
+
+  it("sets partially_shipped for mix of shipped and delivered", async () => {
+    setupMasterMocks(
+      "awaiting_fulfillment",
+      ["shipped", "delivered", "shipped"],
+      true,
+      "partially_shipped",
+    );
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+    expect(mockFrom).toHaveBeenCalledTimes(5);
+  });
+
+  it("sets partially_shipped when some cancelled and rest shipped", async () => {
+    setupMasterMocks(
+      "awaiting_fulfillment",
+      ["cancelled", "shipped", "shipped"],
+      true,
+      "partially_shipped",
+    );
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+    expect(mockFrom).toHaveBeenCalledTimes(5);
+  });
+
+  it("sets cancelled when all items cancelled", async () => {
+    setupMasterMocks(
+      "awaiting_fulfillment",
+      ["cancelled", "cancelled", "cancelled"],
+      true,
+      "cancelled",
+    );
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+    expect(mockFrom).toHaveBeenCalledTimes(5);
+  });
+
+  it("does not update when status already matches", async () => {
+    setupMasterMocks("fully_shipped", ["shipped", "shipped", "shipped"], false);
+
+    await OrderService.updateMasterOrderStatus(ORDER_ID, CHANGED_BY);
+
+    // Only 2 from() calls — no update triggered
+    expect(mockFrom).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── getOrderById ────────────────────────────────────────────────────
+
+describe("OrderService.getOrderById", () => {
+  function makeFullOrderRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: ORDER_ID,
+      order_number: "ORD-20260216-ABC12",
+      customer_id: USER_ID,
+      parent_order_id: null,
+      supplier_id: null,
+      total_amount: "32.48",
+      tax_amount: "2.48",
+      shipping_address: validAddress,
+      status: "pending_payment",
+      payment_status: "pending",
+      payment_intent_id: null,
+      notes: null,
+      created_at: "2026-02-16T00:00:00Z",
+      updated_at: "2026-02-16T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  function makeDbOrderItem(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "oi-uuid-1",
+      order_id: ORDER_ID,
+      product_id: "prod-1",
+      supplier_id: SUPPLIER_1,
+      quantity: 2,
+      unit_price: "15.00",
+      subtotal: "30.00",
+      fulfillment_status: "pending",
+      ...overrides,
+    };
+  }
+
+  function makeHistoryRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "hist-1",
+      order_id: ORDER_ID,
+      from_status: "pending_payment",
+      to_status: "payment_processing",
+      changed_by: "user-admin-1",
+      reason: "Payment initiated",
+      created_at: "2026-02-16T01:00:00Z",
+      ...overrides,
+    };
+  }
+
+  it("returns order with items and status_history", async () => {
+    const orderChain = mockQuery({ data: makeFullOrderRow() });
+    const itemsChain = mockQuery({ data: [makeDbOrderItem()] });
+    const historyChain = mockQuery({ data: [makeHistoryRow()] });
+
+    mockFrom
+      .mockReturnValueOnce(orderChain)
+      .mockReturnValueOnce(itemsChain)
+      .mockReturnValueOnce(historyChain);
+
+    const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
+
+    expect(result.id).toBe(ORDER_ID);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].unit_price).toBe(15.0);
+    expect(result.status_history).toHaveLength(1);
+    expect(result.status_history![0].to_status).toBe("payment_processing");
+    expect(result.total_amount).toBe(32.48);
+  });
+
+  it("allows customer to view own order", async () => {
+    const orderChain = mockQuery({ data: makeFullOrderRow({ customer_id: USER_ID }) });
+    const itemsChain = mockQuery({ data: [] });
+    const historyChain = mockQuery({ data: [] });
+
+    mockFrom
+      .mockReturnValueOnce(orderChain)
+      .mockReturnValueOnce(itemsChain)
+      .mockReturnValueOnce(historyChain);
+
+    const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
+    expect(result.id).toBe(ORDER_ID);
+  });
+
+  it("throws forbidden when customer tries to view another's order", async () => {
+    const orderChain = mockQuery({ data: makeFullOrderRow({ customer_id: "other-user" }) });
+    mockFrom.mockReturnValueOnce(orderChain);
+
+    await expect(OrderService.getOrderById(ORDER_ID, USER_ID, "customer")).rejects.toThrow(
+      "You can only view your own orders",
+    );
+  });
+
+  it("throws notFound when order does not exist", async () => {
+    const orderChain = mockQuery({ data: null, error: { message: "not found" } });
+    mockFrom.mockReturnValueOnce(orderChain);
+
+    await expect(OrderService.getOrderById(ORDER_ID, USER_ID, "customer")).rejects.toThrow(
+      "Order not found",
+    );
+  });
+});

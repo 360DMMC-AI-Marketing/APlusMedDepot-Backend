@@ -52,4 +52,74 @@ const router = Router();
  */
 router.post("/", authenticate, authorize("customer"), OrderController.create);
 
+/**
+ * @openapi
+ * /orders/{id}/status:
+ *   put:
+ *     summary: Update an order's status (admin only)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending_payment, payment_processing, payment_confirmed, awaiting_fulfillment, partially_shipped, fully_shipped, delivered, cancelled, refunded]
+ *               reason:
+ *                 type: string
+ *                 maxLength: 500
+ *     responses:
+ *       200:
+ *         description: Order status updated
+ *       400:
+ *         description: Invalid status or invalid transition
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — not an admin
+ *       404:
+ *         description: Order not found
+ */
+router.put("/:id/status", authenticate, authorize("admin"), OrderController.updateStatus);
+
+/**
+ * @openapi
+ * /orders/{id}:
+ *   get:
+ *     summary: Get order details with items and status history
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Order with items and status history
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — customer can only view own orders
+ *       404:
+ *         description: Order not found
+ */
+router.get("/:id", authenticate, OrderController.getById);
+
 export default router;

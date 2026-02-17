@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { z } from "zod";
 
 import { OrderService } from "../services/order.service";
+import { ORDER_STATUSES } from "../utils/orderStateMachine";
 
 const createOrderSchema = z.object({
   shipping_address: z.object({
@@ -26,5 +27,30 @@ export class OrderController {
       validated.notes,
     );
     res.status(201).json({ order });
+  }
+
+  static async updateStatus(req: Request, res: Response): Promise<void> {
+    const updateStatusSchema = z.object({
+      status: z.enum(ORDER_STATUSES),
+      reason: z.string().max(500).optional(),
+    });
+
+    const validated = updateStatusSchema.parse(req.body);
+    const order = await OrderService.updateOrderStatus(
+      req.params.id as string,
+      validated.status,
+      req.user!.id,
+      validated.reason,
+    );
+    res.status(200).json({ order });
+  }
+
+  static async getById(req: Request, res: Response): Promise<void> {
+    const order = await OrderService.getOrderById(
+      req.params.id as string,
+      req.user!.id,
+      req.user!.role,
+    );
+    res.status(200).json({ order });
   }
 }

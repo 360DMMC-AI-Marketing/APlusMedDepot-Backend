@@ -1,9 +1,11 @@
 import { supabaseAdmin } from "../config/supabase";
-import { AppError, badRequest } from "../utils/errors";
+import { AppError, badRequest, notFound, forbidden } from "../utils/errors";
+import { isValidTransition, getNextStatuses } from "../utils/orderStateMachine";
 import { checkAndDecrementStock, incrementStock } from "../utils/inventory";
 import { splitOrderBySupplier } from "./orderSplitting.service";
 import type { ShippingAddress } from "../types/checkout.types";
-import type { Order, OrderItem } from "../types/order.types";
+import type { Order, OrderItem, OrderStatusHistory } from "../types/order.types";
+import type { OrderStatus } from "../utils/orderStateMachine";
 import type { StockDecrementItem, IncrementItem } from "../utils/inventory";
 
 const DEFAULT_TAX_RATE = 0.0825;
@@ -301,5 +303,273 @@ export class OrderService {
       }
       throw err;
     }
+  }
+
+  // ── Update order status with transition validation ──────────────────
+
+  static async updateOrderStatus(
+    orderId: string,
+    newStatus: OrderStatus,
+    changedBy: string,
+    reason?: string,
+  ): Promise<Order> {
+    // 1. Fetch current order
+    const { data: current, error: fetchError } = await supabaseAdmin
+      .from("orders")
+      .select("id, status")
+      .eq("id", orderId)
+      .single();
+
+    if (fetchError || !current) {
+      throw notFound("Order");
+    }
+
+    const currentOrder = current as unknown as { id: string; status: string };
+    const currentStatus = currentOrder.status as OrderStatus;
+
+    // 2. Validate transition
+    if (!isValidTransition(currentStatus, newStatus)) {
+      const allowed = getNextStatuses(currentStatus);
+      throw badRequest(
+        `Invalid status transition from '${currentStatus}' to '${newStatus}'. Allowed: [${allowed.join(", ")}]`,
+      );
+    }
+
+    // 3. Update status
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from("orders")
+      .update({ status: newStatus })
+      .eq("id", orderId)
+      .select(
+        "id, order_number, customer_id, parent_order_id, supplier_id, total_amount, tax_amount, shipping_address, status, payment_status, payment_intent_id, notes, created_at, updated_at",
+      )
+      .single();
+
+    if (updateError || !updated) {
+      throw new AppError(
+        updateError?.message ?? "Failed to update order status",
+        500,
+        "DATABASE_ERROR",
+      );
+    }
+
+    // 4. Insert history record
+    const { error: historyError } = await supabaseAdmin.from("order_status_history").insert({
+      order_id: orderId,
+      from_status: currentStatus,
+      to_status: newStatus,
+      changed_by: changedBy,
+      reason: reason ?? null,
+    });
+
+    if (historyError) {
+      throw new AppError(historyError.message, 500, "DATABASE_ERROR");
+    }
+
+    const order = updated as unknown as {
+      id: string;
+      order_number: string;
+      customer_id: string;
+      parent_order_id: string | null;
+      supplier_id: string | null;
+      total_amount: string;
+      tax_amount: string;
+      shipping_address: ShippingAddress;
+      status: string;
+      payment_status: string;
+      payment_intent_id: string | null;
+      notes: string | null;
+      created_at: string;
+      updated_at: string;
+    };
+
+    return {
+      id: order.id,
+      order_number: order.order_number,
+      customer_id: order.customer_id,
+      parent_order_id: order.parent_order_id,
+      supplier_id: order.supplier_id,
+      total_amount: Number(order.total_amount),
+      tax_amount: Number(order.tax_amount),
+      shipping_address: order.shipping_address,
+      status: order.status,
+      payment_status: order.payment_status,
+      payment_intent_id: order.payment_intent_id,
+      notes: order.notes,
+      items: [],
+      created_at: order.created_at,
+      updated_at: order.updated_at,
+    };
+  }
+
+  // ── Aggregate item fulfillment statuses → master order status ───────
+
+  static async updateMasterOrderStatus(orderId: string, changedBy: string): Promise<void> {
+    // 1. Fetch current order
+    const { data: current, error: fetchError } = await supabaseAdmin
+      .from("orders")
+      .select("id, status")
+      .eq("id", orderId)
+      .single();
+
+    if (fetchError || !current) return;
+
+    const currentOrder = current as unknown as { id: string; status: string };
+
+    // 2. Fetch all order items
+    const { data: items, error: itemsError } = await supabaseAdmin
+      .from("order_items")
+      .select("fulfillment_status")
+      .eq("order_id", orderId);
+
+    if (itemsError || !items || items.length === 0) return;
+
+    const statuses = (items as unknown as Array<{ fulfillment_status: string }>).map(
+      (i) => i.fulfillment_status,
+    );
+
+    // 3. Determine new master status
+    const allDelivered = statuses.every((s) => s === "delivered");
+    const allCancelled = statuses.every((s) => s === "cancelled");
+    const allShipped = statuses.every((s) => s === "shipped");
+    const anyShipped = statuses.some((s) => s === "shipped");
+    const anyDelivered = statuses.some((s) => s === "delivered");
+
+    let newStatus: OrderStatus | null = null;
+
+    if (allDelivered) {
+      newStatus = "delivered";
+    } else if (allCancelled) {
+      newStatus = "cancelled";
+    } else if (allShipped) {
+      newStatus = "fully_shipped";
+    } else if (anyShipped || anyDelivered) {
+      newStatus = "partially_shipped";
+    }
+
+    // 4. No change needed
+    if (!newStatus || newStatus === currentOrder.status) return;
+
+    // 5. Validate transition — skip silently if invalid
+    if (!isValidTransition(currentOrder.status as OrderStatus, newStatus)) {
+      console.warn(
+        `[ORDER_STATUS] Skipping invalid auto-transition: ${currentOrder.status} → ${newStatus} for order ${orderId}`,
+      );
+      return;
+    }
+
+    // 6. Delegate to updateOrderStatus
+    await OrderService.updateOrderStatus(
+      orderId,
+      newStatus,
+      changedBy,
+      "Auto-updated from item fulfillment statuses",
+    );
+  }
+
+  // ── Get order by ID with items and status history ───────────────────
+
+  static async getOrderById(orderId: string, userId: string, userRole: string): Promise<Order> {
+    // 1. Fetch order
+    const { data: orderData, error: orderError } = await supabaseAdmin
+      .from("orders")
+      .select(
+        "id, order_number, customer_id, parent_order_id, supplier_id, total_amount, tax_amount, shipping_address, status, payment_status, payment_intent_id, notes, created_at, updated_at",
+      )
+      .eq("id", orderId)
+      .single();
+
+    if (orderError || !orderData) {
+      throw notFound("Order");
+    }
+
+    const order = orderData as unknown as {
+      id: string;
+      order_number: string;
+      customer_id: string;
+      parent_order_id: string | null;
+      supplier_id: string | null;
+      total_amount: string;
+      tax_amount: string;
+      shipping_address: ShippingAddress;
+      status: string;
+      payment_status: string;
+      payment_intent_id: string | null;
+      notes: string | null;
+      created_at: string;
+      updated_at: string;
+    };
+
+    // 2. Authorization check
+    if (userRole === "customer" && order.customer_id !== userId) {
+      throw forbidden("You can only view your own orders");
+    }
+
+    // 3. Fetch items
+    const { data: itemsData, error: itemsError } = await supabaseAdmin
+      .from("order_items")
+      .select(
+        "id, order_id, product_id, supplier_id, quantity, unit_price, subtotal, fulfillment_status",
+      )
+      .eq("order_id", orderId);
+
+    if (itemsError) {
+      throw new AppError(itemsError.message, 500, "DATABASE_ERROR");
+    }
+
+    const dbItems = (itemsData ?? []) as unknown as Array<{
+      id: string;
+      order_id: string;
+      product_id: string;
+      supplier_id: string;
+      quantity: number;
+      unit_price: string;
+      subtotal: string;
+      fulfillment_status: string;
+    }>;
+
+    const responseItems: OrderItem[] = dbItems.map((dbItem) => ({
+      id: dbItem.id,
+      order_id: dbItem.order_id,
+      product_id: dbItem.product_id,
+      product_name: "",
+      supplier_id: dbItem.supplier_id,
+      quantity: dbItem.quantity,
+      unit_price: Number(dbItem.unit_price),
+      subtotal: Number(dbItem.subtotal),
+      fulfillment_status: dbItem.fulfillment_status,
+    }));
+
+    // 4. Fetch status history
+    const { data: historyData, error: historyError } = await supabaseAdmin
+      .from("order_status_history")
+      .select("id, order_id, from_status, to_status, changed_by, reason, created_at")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: false });
+
+    if (historyError) {
+      throw new AppError(historyError.message, 500, "DATABASE_ERROR");
+    }
+
+    const statusHistory = (historyData ?? []) as unknown as OrderStatusHistory[];
+
+    return {
+      id: order.id,
+      order_number: order.order_number,
+      customer_id: order.customer_id,
+      parent_order_id: order.parent_order_id,
+      supplier_id: order.supplier_id,
+      total_amount: Number(order.total_amount),
+      tax_amount: Number(order.tax_amount),
+      shipping_address: order.shipping_address,
+      status: order.status,
+      payment_status: order.payment_status,
+      payment_intent_id: order.payment_intent_id,
+      notes: order.notes,
+      items: responseItems,
+      status_history: statusHistory,
+      created_at: order.created_at,
+      updated_at: order.updated_at,
+    };
   }
 }

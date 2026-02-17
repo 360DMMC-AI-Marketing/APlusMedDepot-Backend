@@ -26,10 +26,16 @@ jest.mock("../../src/services/checkout.service", () => ({
 }));
 
 const mockCreateOrder = jest.fn();
+const mockUpdateOrderStatus = jest.fn();
+const mockGetOrderById = jest.fn();
+const mockUpdateMasterOrderStatus = jest.fn();
 
 jest.mock("../../src/services/order.service", () => ({
   OrderService: {
     createOrder: mockCreateOrder,
+    updateOrderStatus: mockUpdateOrderStatus,
+    getOrderById: mockGetOrderById,
+    updateMasterOrderStatus: mockUpdateMasterOrderStatus,
   },
 }));
 
@@ -64,6 +70,18 @@ const supplierUser = {
   companyName: null,
   phone: null,
   role: "supplier" as const,
+  status: "approved" as const,
+  lastLogin: null,
+};
+
+const adminUser = {
+  id: "user-admin-1",
+  email: "admin@example.com",
+  firstName: "Admin",
+  lastName: "User",
+  companyName: null,
+  phone: null,
+  role: "admin" as const,
   status: "approved" as const,
   lastLogin: null,
 };
@@ -247,5 +265,167 @@ describe("POST /api/orders — integration", () => {
       validBody.shipping_address,
       validBody.notes,
     );
+  });
+});
+
+// ── PUT /api/orders/:id/status ──────────────────────────────────────
+
+const ORDER_ID = "order-uuid-1";
+
+const mockUpdatedOrder = {
+  id: ORDER_ID,
+  order_number: "ORD-20260216-ABC12",
+  customer_id: "user-customer-1",
+  parent_order_id: null,
+  supplier_id: null,
+  total_amount: 32.48,
+  tax_amount: 2.48,
+  shipping_address: validBody.shipping_address,
+  status: "payment_processing",
+  payment_status: "pending",
+  payment_intent_id: null,
+  notes: null,
+  items: [],
+  created_at: "2026-02-16T00:00:00Z",
+  updated_at: "2026-02-16T00:00:00Z",
+};
+
+describe("PUT /api/orders/:id/status — integration", () => {
+  it("returns 200 on valid status update (admin)", async () => {
+    mockVerifyToken.mockResolvedValue(adminUser);
+    mockUpdateOrderStatus.mockResolvedValue(mockUpdatedOrder);
+
+    const res = await request(app)
+      .put(`/api/orders/${ORDER_ID}/status`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ status: "payment_processing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.order.status).toBe("payment_processing");
+    expect(mockUpdateOrderStatus).toHaveBeenCalledWith(
+      ORDER_ID,
+      "payment_processing",
+      adminUser.id,
+      undefined,
+    );
+  });
+
+  it("returns 400 for invalid status value (Zod rejects)", async () => {
+    mockVerifyToken.mockResolvedValue(adminUser);
+
+    const res = await request(app)
+      .put(`/api/orders/${ORDER_ID}/status`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ status: "invalid_status" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(mockUpdateOrderStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when service throws badRequest (invalid transition)", async () => {
+    mockVerifyToken.mockResolvedValue(adminUser);
+    mockUpdateOrderStatus.mockRejectedValue(
+      Object.assign(new Error("Invalid status transition"), {
+        statusCode: 400,
+        code: "BAD_REQUEST",
+      }),
+    );
+
+    const res = await request(app)
+      .put(`/api/orders/${ORDER_ID}/status`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ status: "payment_processing" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app)
+      .put(`/api/orders/${ORDER_ID}/status`)
+      .send({ status: "payment_processing" });
+
+    expect(res.status).toBe(401);
+    expect(mockUpdateOrderStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when customer tries to update status", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+
+    const res = await request(app)
+      .put(`/api/orders/${ORDER_ID}/status`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ status: "payment_processing" });
+
+    expect(res.status).toBe(403);
+    expect(mockUpdateOrderStatus).not.toHaveBeenCalled();
+  });
+});
+
+// ── GET /api/orders/:id ─────────────────────────────────────────────
+
+const mockFullOrder = {
+  ...mockOrderResponse,
+  status_history: [
+    {
+      id: "hist-1",
+      order_id: ORDER_ID,
+      from_status: "pending_payment",
+      to_status: "payment_processing",
+      changed_by: "user-admin-1",
+      reason: "Payment initiated",
+      created_at: "2026-02-16T01:00:00Z",
+    },
+  ],
+};
+
+describe("GET /api/orders/:id — integration", () => {
+  it("returns 200 with order, items, and status_history (customer)", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+    mockGetOrderById.mockResolvedValue(mockFullOrder);
+
+    const res = await request(app)
+      .get(`/api/orders/${ORDER_ID}`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.order.id).toBe(ORDER_ID);
+    expect(res.body.order.items).toHaveLength(1);
+    expect(res.body.order.status_history).toHaveLength(1);
+  });
+
+  it("returns 200 when admin views any order", async () => {
+    mockVerifyToken.mockResolvedValue(adminUser);
+    mockGetOrderById.mockResolvedValue(mockFullOrder);
+
+    const res = await request(app)
+      .get(`/api/orders/${ORDER_ID}`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockGetOrderById).toHaveBeenCalledWith(ORDER_ID, adminUser.id, "admin");
+  });
+
+  it("returns 403 when customer views another's order", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+    mockGetOrderById.mockRejectedValue(
+      Object.assign(new Error("You can only view your own orders"), {
+        statusCode: 403,
+        code: "FORBIDDEN",
+      }),
+    );
+
+    const res = await request(app)
+      .get(`/api/orders/${ORDER_ID}`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).get(`/api/orders/${ORDER_ID}`);
+
+    expect(res.status).toBe(401);
+    expect(mockGetOrderById).not.toHaveBeenCalled();
   });
 });
