@@ -39,6 +39,12 @@ jest.mock("../../src/services/cart.service", () => ({
   CartService: {},
 }));
 
+const mockCheckStock = jest.fn();
+
+jest.mock("../../src/utils/inventory", () => ({
+  checkStock: mockCheckStock,
+}));
+
 jest.mock(
   "express-rate-limit",
   () => () => (_req: unknown, _res: unknown, next: () => void) => next(),
@@ -379,5 +385,53 @@ describe("DELETE /api/products/:id", () => {
       .set("Authorization", "Bearer valid-token");
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/products/:id/stock", () => {
+  it("returns 200 with stock info and in_stock: true", async () => {
+    mockCheckStock.mockResolvedValue({ available: true, currentStock: 50 });
+
+    const res = await request(app).get(`/api/products/${PRODUCT_ID}/stock`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      product_id: PRODUCT_ID,
+      stock_quantity: 50,
+      in_stock: true,
+    });
+    expect(mockCheckStock).toHaveBeenCalledWith(PRODUCT_ID, 0);
+  });
+
+  it("returns 200 with in_stock: false when stock is 0", async () => {
+    mockCheckStock.mockResolvedValue({ available: true, currentStock: 0 });
+
+    const res = await request(app).get(`/api/products/${PRODUCT_ID}/stock`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      product_id: PRODUCT_ID,
+      stock_quantity: 0,
+      in_stock: false,
+    });
+  });
+
+  it("returns 404 when product not found", async () => {
+    const notFoundErr = new Error("Product not found");
+    Object.assign(notFoundErr, { code: "NOT_FOUND", statusCode: 404, name: "AppError" });
+    mockCheckStock.mockRejectedValue(notFoundErr);
+
+    const res = await request(app).get(`/api/products/${PRODUCT_ID}/stock`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 400 for invalid UUID", async () => {
+    const res = await request(app).get("/api/products/not-a-uuid/stock");
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(mockCheckStock).not.toHaveBeenCalled();
   });
 });

@@ -4,6 +4,8 @@ import { ProductController } from "../controllers/product.controller";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
 import { uploadSingle } from "../middleware/upload";
+import { checkStock } from "../utils/inventory";
+import { uuidParamSchema } from "../validators/product.validator";
 
 const router = Router();
 
@@ -119,6 +121,47 @@ router.get("/", authenticate, ProductController.list);
  *         description: Unauthorized
  */
 router.get("/search", authenticate, ProductController.search);
+
+/**
+ * @openapi
+ * /products/{id}/stock:
+ *   get:
+ *     summary: Check product stock availability
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Stock availability
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 product_id:
+ *                   type: string
+ *                   format: uuid
+ *                 stock_quantity:
+ *                   type: integer
+ *                 in_stock:
+ *                   type: boolean
+ *       404:
+ *         description: Product not found
+ */
+router.get("/:id/stock", async (req: Request, res: Response) => {
+  const id = uuidParamSchema.parse(req.params.id);
+  const result = await checkStock(id, 0);
+  res.status(200).json({
+    product_id: id,
+    stock_quantity: result.currentStock,
+    in_stock: result.currentStock > 0,
+  });
+});
 
 /**
  * @openapi
