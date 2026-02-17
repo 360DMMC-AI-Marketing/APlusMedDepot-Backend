@@ -58,6 +58,50 @@ const testPassword = "TestPassword123!";
 
 beforeAll(async () => {
   // ============================================
+  // Clean up leftover data from previous test runs
+  // ============================================
+  const testEmails = [
+    "supplier-a-rls@test.com",
+    "supplier-b-rls@test.com",
+    "customer-c-rls@test.com",
+    "admin-rls@test.com",
+  ];
+
+  // 1. Delete products belonging to stale suppliers
+  const { data: staleSuppliers } = await supabaseAdmin
+    .from("suppliers")
+    .select("id")
+    .in("contact_email", ["supplier-a-rls@test.com", "supplier-b-rls@test.com"]);
+
+  if (staleSuppliers && staleSuppliers.length > 0) {
+    const staleIds = staleSuppliers.map((s) => s.id);
+    await supabaseAdmin.from("products").delete().in("supplier_id", staleIds);
+  }
+
+  // 2. Delete stale suppliers
+  await supabaseAdmin
+    .from("suppliers")
+    .delete()
+    .in("contact_email", ["supplier-a-rls@test.com", "supplier-b-rls@test.com"]);
+
+  // 3. Delete stale user records
+  await supabaseAdmin.from("users").delete().in("email", testEmails);
+
+  // 4. Delete stale auth users
+  const { data: authList } = await supabaseAdmin.auth.admin.listUsers();
+  if (authList?.users) {
+    for (const user of authList.users) {
+      if (user.email && testEmails.includes(user.email)) {
+        try {
+          await supabaseAdmin.auth.admin.deleteUser(user.id);
+        } catch {
+          // Ignore — user may already be deleted
+        }
+      }
+    }
+  }
+
+  // ============================================
   // Create test users via Supabase Auth
   // ============================================
 
@@ -109,7 +153,7 @@ beforeAll(async () => {
   // Insert user records (bypassing RLS)
   // ============================================
 
-  await supabaseAdmin.from("users").insert([
+  const { error: usersError } = await supabaseAdmin.from("users").insert([
     {
       id: userAId,
       email: "supplier-a-rls@test.com",
@@ -148,6 +192,9 @@ beforeAll(async () => {
       status: "approved",
     },
   ]);
+  if (usersError) {
+    throw new Error(`Failed to insert users: ${usersError.message}`);
+  }
 
   // ============================================
   // Create supplier records
