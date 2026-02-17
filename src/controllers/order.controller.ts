@@ -18,6 +18,19 @@ const createOrderSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
+const orderListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(10)
+    .transform((v) => Math.min(v, 50)),
+  status: z.enum(ORDER_STATUSES).optional(),
+  sort_by: z.enum(["created_at"]).default("created_at"),
+  sort_order: z.enum(["desc", "asc"]).default("desc"),
+});
+
 export class OrderController {
   static async create(req: Request, res: Response): Promise<void> {
     const validated = createOrderSchema.parse(req.body);
@@ -27,6 +40,12 @@ export class OrderController {
       validated.notes,
     );
     res.status(201).json({ order });
+  }
+
+  static async list(req: Request, res: Response): Promise<void> {
+    const validated = orderListQuerySchema.parse(req.query);
+    const result = await OrderService.listOrders(req.user!.id, validated);
+    res.status(200).json(result);
   }
 
   static async updateStatus(req: Request, res: Response): Promise<void> {

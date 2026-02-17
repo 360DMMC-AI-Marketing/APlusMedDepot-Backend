@@ -26,6 +26,7 @@ jest.mock("../../src/services/checkout.service", () => ({
 }));
 
 const mockCreateOrder = jest.fn();
+const mockListOrders = jest.fn();
 const mockUpdateOrderStatus = jest.fn();
 const mockGetOrderById = jest.fn();
 const mockUpdateMasterOrderStatus = jest.fn();
@@ -33,6 +34,7 @@ const mockUpdateMasterOrderStatus = jest.fn();
 jest.mock("../../src/services/order.service", () => ({
   OrderService: {
     createOrder: mockCreateOrder,
+    listOrders: mockListOrders,
     updateOrderStatus: mockUpdateOrderStatus,
     getOrderById: mockGetOrderById,
     updateMasterOrderStatus: mockUpdateMasterOrderStatus,
@@ -121,6 +123,10 @@ const mockOrderResponse = {
       unit_price: 15.0,
       subtotal: 30.0,
       fulfillment_status: "pending",
+      tracking_number: null,
+      carrier: null,
+      product_image: "img/gloves.jpg",
+      supplier_name: "MedSupply Co",
     },
   ],
   created_at: "2026-02-16T00:00:00Z",
@@ -268,6 +274,105 @@ describe("POST /api/orders — integration", () => {
   });
 });
 
+// ── GET /api/orders ─────────────────────────────────────────────────
+
+const mockListResult = {
+  orders: [
+    {
+      id: "order-uuid-1",
+      order_number: "ORD-20260216-ABC12",
+      status: "pending_payment",
+      payment_status: "pending",
+      total_amount: 32.48,
+      item_count: 2,
+      created_at: "2026-02-16T00:00:00Z",
+    },
+  ],
+  pagination: { page: 1, limit: 10, total: 1, total_pages: 1 },
+};
+
+describe("GET /api/orders — integration", () => {
+  it("returns 200 with paginated response shape", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+    mockListOrders.mockResolvedValue(mockListResult);
+
+    const res = await request(app).get("/api/orders").set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.orders).toHaveLength(1);
+    expect(res.body.orders[0].item_count).toBe(2);
+    expect(res.body.pagination).toEqual({
+      page: 1,
+      limit: 10,
+      total: 1,
+      total_pages: 1,
+    });
+  });
+
+  it("passes page=2 to service", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+    mockListOrders.mockResolvedValue({
+      orders: [],
+      pagination: { page: 2, limit: 10, total: 0, total_pages: 0 },
+    });
+
+    await request(app).get("/api/orders?page=2").set("Authorization", "Bearer valid-token");
+
+    expect(mockListOrders).toHaveBeenCalledWith(
+      customerUser.id,
+      expect.objectContaining({ page: 2 }),
+    );
+  });
+
+  it("caps limit > 50 to 50", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+    mockListOrders.mockResolvedValue({
+      orders: [],
+      pagination: { page: 1, limit: 50, total: 0, total_pages: 0 },
+    });
+
+    await request(app).get("/api/orders?limit=100").set("Authorization", "Bearer valid-token");
+
+    expect(mockListOrders).toHaveBeenCalledWith(
+      customerUser.id,
+      expect.objectContaining({ limit: 50 }),
+    );
+  });
+
+  it("passes status filter to service", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+    mockListOrders.mockResolvedValue({
+      orders: [],
+      pagination: { page: 1, limit: 10, total: 0, total_pages: 0 },
+    });
+
+    await request(app)
+      .get("/api/orders?status=delivered")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(mockListOrders).toHaveBeenCalledWith(
+      customerUser.id,
+      expect.objectContaining({ status: "delivered" }),
+    );
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).get("/api/orders");
+
+    expect(res.status).toBe(401);
+    expect(mockListOrders).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when supplier tries to list orders", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+
+    const res = await request(app).get("/api/orders").set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+    expect(mockListOrders).not.toHaveBeenCalled();
+  });
+});
+
 // ── PUT /api/orders/:id/status ──────────────────────────────────────
 
 const ORDER_ID = "order-uuid-1";
@@ -380,7 +485,7 @@ const mockFullOrder = {
 };
 
 describe("GET /api/orders/:id — integration", () => {
-  it("returns 200 with order, items, and status_history (customer)", async () => {
+  it("returns 200 with order, enhanced items, and status_history (customer)", async () => {
     mockVerifyToken.mockResolvedValue(customerUser);
     mockGetOrderById.mockResolvedValue(mockFullOrder);
 
@@ -391,6 +496,10 @@ describe("GET /api/orders/:id — integration", () => {
     expect(res.status).toBe(200);
     expect(res.body.order.id).toBe(ORDER_ID);
     expect(res.body.order.items).toHaveLength(1);
+    expect(res.body.order.items[0].product_name).toBe("Surgical Gloves");
+    expect(res.body.order.items[0].product_image).toBe("img/gloves.jpg");
+    expect(res.body.order.items[0].supplier_name).toBe("MedSupply Co");
+    expect(res.body.order.items[0].fulfillment_status).toBe("pending");
     expect(res.body.order.status_history).toHaveLength(1);
   });
 

@@ -54,6 +54,53 @@ router.post("/", authenticate, authorize("customer"), OrderController.create);
 
 /**
  * @openapi
+ * /orders:
+ *   get:
+ *     summary: List customer's orders with pagination
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *           maximum: 50
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending_payment, payment_processing, payment_confirmed, awaiting_fulfillment, partially_shipped, fully_shipped, delivered, cancelled, refunded]
+ *       - in: query
+ *         name: sort_by
+ *         schema:
+ *           type: string
+ *           enum: [created_at]
+ *           default: created_at
+ *       - in: query
+ *         name: sort_order
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *     responses:
+ *       200:
+ *         description: Paginated list of customer orders
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — not a customer
+ */
+router.get("/", authenticate, authorize("customer"), OrderController.list);
+
+/**
+ * @openapi
  * /orders/{id}/status:
  *   put:
  *     summary: Update an order's status (admin only)

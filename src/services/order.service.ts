@@ -4,7 +4,7 @@ import { isValidTransition, getNextStatuses } from "../utils/orderStateMachine";
 import { checkAndDecrementStock, incrementStock } from "../utils/inventory";
 import { splitOrderBySupplier } from "./orderSplitting.service";
 import type { ShippingAddress } from "../types/checkout.types";
-import type { Order, OrderItem, OrderStatusHistory } from "../types/order.types";
+import type { Order, OrderItem, OrderStatusHistory, OrderListResult } from "../types/order.types";
 import type { OrderStatus } from "../utils/orderStateMachine";
 import type { StockDecrementItem, IncrementItem } from "../utils/inventory";
 
@@ -305,6 +305,71 @@ export class OrderService {
     }
   }
 
+  // ── List customer orders with pagination ─────────────────────────────
+
+  static async listOrders(
+    userId: string,
+    query: { page: number; limit: number; status?: string; sort_by: string; sort_order: string },
+  ): Promise<OrderListResult> {
+    let q = supabaseAdmin
+      .from("orders")
+      .select(
+        "id, order_number, status, payment_status, total_amount, created_at, order_items(id)",
+        { count: "exact" },
+      )
+      .eq("customer_id", userId)
+      .is("parent_order_id", null);
+
+    if (query.status) {
+      q = q.eq("status", query.status);
+    }
+
+    const from = (query.page - 1) * query.limit;
+    const to = from + query.limit - 1;
+
+    q = q.order(query.sort_by, { ascending: query.sort_order === "asc" }).range(from, to);
+
+    const { data, error, count } = await q;
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    type OrderListRow = {
+      id: string;
+      order_number: string;
+      status: string;
+      payment_status: string;
+      total_amount: string;
+      created_at: string;
+      order_items: Array<{ id: string }>;
+    };
+
+    const rows = (data as unknown as OrderListRow[] | null) ?? [];
+
+    const orders = rows.map((row) => ({
+      id: row.id,
+      order_number: row.order_number,
+      status: row.status,
+      payment_status: row.payment_status,
+      total_amount: Number(row.total_amount),
+      item_count: row.order_items.length,
+      created_at: row.created_at,
+    }));
+
+    const total = count ?? 0;
+
+    return {
+      orders,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        total_pages: Math.ceil(total / query.limit),
+      },
+    };
+  }
+
   // ── Update order status with transition validation ──────────────────
 
   static async updateOrderStatus(
@@ -505,11 +570,11 @@ export class OrderService {
       throw forbidden("You can only view your own orders");
     }
 
-    // 3. Fetch items
+    // 3. Fetch items with product & supplier joins
     const { data: itemsData, error: itemsError } = await supabaseAdmin
       .from("order_items")
       .select(
-        "id, order_id, product_id, supplier_id, quantity, unit_price, subtotal, fulfillment_status",
+        "id, order_id, product_id, supplier_id, quantity, unit_price, subtotal, fulfillment_status, tracking_number, carrier, products(name, images), suppliers(business_name)",
       )
       .eq("order_id", orderId);
 
@@ -517,7 +582,7 @@ export class OrderService {
       throw new AppError(itemsError.message, 500, "DATABASE_ERROR");
     }
 
-    const dbItems = (itemsData ?? []) as unknown as Array<{
+    type ItemRow = {
       id: string;
       order_id: string;
       product_id: string;
@@ -526,18 +591,28 @@ export class OrderService {
       unit_price: string;
       subtotal: string;
       fulfillment_status: string;
-    }>;
+      tracking_number: string | null;
+      carrier: string | null;
+      products: { name: string; images: string[] | null } | null;
+      suppliers: { business_name: string } | null;
+    };
+
+    const dbItems = (itemsData ?? []) as unknown as ItemRow[];
 
     const responseItems: OrderItem[] = dbItems.map((dbItem) => ({
       id: dbItem.id,
       order_id: dbItem.order_id,
       product_id: dbItem.product_id,
-      product_name: "",
+      product_name: dbItem.products?.name ?? "",
       supplier_id: dbItem.supplier_id,
       quantity: dbItem.quantity,
       unit_price: Number(dbItem.unit_price),
       subtotal: Number(dbItem.subtotal),
       fulfillment_status: dbItem.fulfillment_status,
+      tracking_number: dbItem.tracking_number ?? null,
+      carrier: dbItem.carrier ?? null,
+      product_image: (dbItem.products?.images ?? [])[0] ?? null,
+      supplier_name: dbItem.suppliers?.business_name ?? "",
     }));
 
     // 4. Fetch status history

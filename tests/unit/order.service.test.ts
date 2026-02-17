@@ -24,8 +24,12 @@ import { OrderService } from "../../src/services/order.service";
 import { AppError } from "../../src/utils/errors";
 
 // Each chain method is its own mock so we can inspect call args
-function mockQuery(result: { data?: unknown; error?: unknown }) {
-  const resolved = { data: result.data ?? null, error: result.error ?? null };
+function mockQuery(result: { data?: unknown; error?: unknown; count?: number }) {
+  const resolved = {
+    data: result.data ?? null,
+    error: result.error ?? null,
+    count: result.count ?? null,
+  };
   const chain: Record<string, jest.Mock> = {};
   const self = () => chain;
   chain.select = jest.fn(self);
@@ -34,7 +38,9 @@ function mockQuery(result: { data?: unknown; error?: unknown }) {
   chain.delete = jest.fn(self);
   chain.eq = jest.fn(self);
   chain.in = jest.fn(self);
+  chain.is = jest.fn(self);
   chain.order = jest.fn(self);
+  chain.range = jest.fn(self);
   chain.single = jest.fn().mockResolvedValue(resolved);
   chain.then = jest
     .fn()
@@ -525,6 +531,93 @@ describe("OrderService.createOrder", () => {
   });
 });
 
+// ── listOrders ──────────────────────────────────────────────────────
+
+describe("OrderService.listOrders", () => {
+  const defaultQuery = {
+    page: 1,
+    limit: 10,
+    sort_by: "created_at",
+    sort_order: "desc",
+  };
+
+  function makeListRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: ORDER_ID,
+      order_number: "ORD-20260216-ABC12",
+      status: "pending_payment",
+      payment_status: "pending",
+      total_amount: "32.48",
+      created_at: "2026-02-16T00:00:00Z",
+      order_items: [{ id: "oi-1" }, { id: "oi-2" }],
+      ...overrides,
+    };
+  }
+
+  it("returns paginated response with correct shape", async () => {
+    const chain = mockQuery({ data: [makeListRow()], count: 1 });
+    mockFrom.mockReturnValueOnce(chain);
+
+    const result = await OrderService.listOrders(USER_ID, defaultQuery);
+
+    expect(result.orders).toHaveLength(1);
+    expect(result.orders[0].id).toBe(ORDER_ID);
+    expect(result.orders[0].total_amount).toBe(32.48);
+    expect(result.orders[0].item_count).toBe(2);
+    expect(result.pagination).toEqual({
+      page: 1,
+      limit: 10,
+      total: 1,
+      total_pages: 1,
+    });
+  });
+
+  it("page=2 passes correct range offset", async () => {
+    const chain = mockQuery({ data: [], count: 25 });
+    mockFrom.mockReturnValueOnce(chain);
+
+    await OrderService.listOrders(USER_ID, { ...defaultQuery, page: 2 });
+
+    expect(chain.range).toHaveBeenCalledWith(10, 19);
+  });
+
+  it("applies status filter when provided", async () => {
+    const chain = mockQuery({ data: [], count: 0 });
+    mockFrom.mockReturnValueOnce(chain);
+
+    await OrderService.listOrders(USER_ID, {
+      ...defaultQuery,
+      status: "delivered",
+    });
+
+    // eq called for customer_id and status
+    const eqCalls = chain.eq.mock.calls;
+    expect(eqCalls).toContainEqual(["status", "delivered"]);
+  });
+
+  it("filters by customer_id and parent_order_id IS NULL", async () => {
+    const chain = mockQuery({ data: [], count: 0 });
+    mockFrom.mockReturnValueOnce(chain);
+
+    await OrderService.listOrders(USER_ID, defaultQuery);
+
+    expect(chain.eq).toHaveBeenCalledWith("customer_id", USER_ID);
+    expect(chain.is).toHaveBeenCalledWith("parent_order_id", null);
+  });
+
+  it("computes item_count from embedded order_items length", async () => {
+    const row = makeListRow({
+      order_items: [{ id: "a" }, { id: "b" }, { id: "c" }],
+    });
+    const chain = mockQuery({ data: [row], count: 1 });
+    mockFrom.mockReturnValueOnce(chain);
+
+    const result = await OrderService.listOrders(USER_ID, defaultQuery);
+
+    expect(result.orders[0].item_count).toBe(3);
+  });
+});
+
 // ── updateOrderStatus ───────────────────────────────────────────────
 
 describe("OrderService.updateOrderStatus", () => {
@@ -829,6 +922,10 @@ describe("OrderService.getOrderById", () => {
       unit_price: "15.00",
       subtotal: "30.00",
       fulfillment_status: "pending",
+      tracking_number: null,
+      carrier: null,
+      products: { name: "Surgical Gloves", images: ["img/gloves.jpg"] },
+      suppliers: { business_name: "MedSupply Co" },
       ...overrides,
     };
   }
@@ -846,9 +943,16 @@ describe("OrderService.getOrderById", () => {
     };
   }
 
-  it("returns order with items and status_history", async () => {
+  it("returns order with items, enhanced fields, and status_history", async () => {
     const orderChain = mockQuery({ data: makeFullOrderRow() });
-    const itemsChain = mockQuery({ data: [makeDbOrderItem()] });
+    const itemsChain = mockQuery({
+      data: [
+        makeDbOrderItem({
+          tracking_number: "1Z999AA10123456784",
+          carrier: "UPS",
+        }),
+      ],
+    });
     const historyChain = mockQuery({ data: [makeHistoryRow()] });
 
     mockFrom
@@ -861,6 +965,12 @@ describe("OrderService.getOrderById", () => {
     expect(result.id).toBe(ORDER_ID);
     expect(result.items).toHaveLength(1);
     expect(result.items[0].unit_price).toBe(15.0);
+    expect(result.items[0].product_name).toBe("Surgical Gloves");
+    expect(result.items[0].product_image).toBe("img/gloves.jpg");
+    expect(result.items[0].supplier_name).toBe("MedSupply Co");
+    expect(result.items[0].tracking_number).toBe("1Z999AA10123456784");
+    expect(result.items[0].carrier).toBe("UPS");
+    expect(result.items[0].fulfillment_status).toBe("pending");
     expect(result.status_history).toHaveLength(1);
     expect(result.status_history![0].to_status).toBe("payment_processing");
     expect(result.total_amount).toBe(32.48);
