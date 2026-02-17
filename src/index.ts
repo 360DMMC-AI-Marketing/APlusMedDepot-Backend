@@ -11,7 +11,7 @@ import { apiLimiter } from "./middleware/rateLimiter";
 import authRoutes from "./routes/auth";
 import productRoutes from "./routes/products";
 import cartRoutes from "./routes/cart";
-import orderRoutes from "./routes/orders";
+import orderRoutes from "./routes/order.routes";
 import paymentRoutes from "./routes/payments";
 import supplierRoutes from "./routes/suppliers";
 import adminRoutes from "./routes/admin";
