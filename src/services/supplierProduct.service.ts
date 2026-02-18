@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../config/supabase";
 import { notFound, forbidden, conflict, badRequest, AppError } from "../utils/errors";
+import { StorageService } from "./storage.service";
 import type {
   SupplierProduct,
   SupplierProductListResponse,
@@ -276,6 +277,126 @@ export class SupplierProductService {
     }
 
     return toSupplierProduct(data as unknown as ProductRow);
+  }
+
+  static async uploadImage(
+    supplierId: string,
+    productId: string,
+    file: Express.Multer.File,
+  ): Promise<SupplierProduct> {
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from("products")
+      .select("id, supplier_id, images")
+      .eq("id", productId)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (fetchError) {
+      throw new AppError(fetchError.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!existing) {
+      throw notFound("Product");
+    }
+
+    const row = existing as { id: string; supplier_id: string; images: string[] | null };
+
+    if (row.supplier_id !== supplierId) {
+      throw forbidden("Not authorized to upload images for this product");
+    }
+
+    const currentImages = row.images ?? [];
+    if (currentImages.length >= 5) {
+      throw badRequest("Maximum 5 images per product");
+    }
+
+    const storagePath = await StorageService.uploadImage(
+      file.buffer,
+      file.originalname,
+      file.mimetype,
+      productId,
+      supplierId,
+    );
+
+    const updatedImages = [...currentImages, storagePath];
+
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .update({ images: updatedImages })
+      .eq("id", productId)
+      .select(PRODUCT_SELECT_FIELDS)
+      .single();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!data) {
+      throw new AppError("Failed to update product images", 500, "DATABASE_ERROR");
+    }
+
+    const product = toSupplierProduct(data as unknown as ProductRow);
+    const signedUrls = await StorageService.getSignedUrls(updatedImages);
+    return { ...product, images: signedUrls };
+  }
+
+  static async deleteImage(
+    supplierId: string,
+    productId: string,
+    imageIndex: number,
+  ): Promise<SupplierProduct> {
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from("products")
+      .select("id, supplier_id, images")
+      .eq("id", productId)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (fetchError) {
+      throw new AppError(fetchError.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!existing) {
+      throw notFound("Product");
+    }
+
+    const row = existing as { id: string; supplier_id: string; images: string[] | null };
+
+    if (row.supplier_id !== supplierId) {
+      throw forbidden("Not authorized to delete images for this product");
+    }
+
+    const images = [...(row.images ?? [])];
+
+    if (imageIndex < 0 || imageIndex >= images.length) {
+      throw badRequest("Image index out of range");
+    }
+
+    const storagePath = images[imageIndex];
+    images.splice(imageIndex, 1);
+
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .update({ images })
+      .eq("id", productId)
+      .select(PRODUCT_SELECT_FIELDS)
+      .single();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!data) {
+      throw new AppError("Failed to update product images", 500, "DATABASE_ERROR");
+    }
+
+    await StorageService.deleteImage(storagePath);
+
+    const product = toSupplierProduct(data as unknown as ProductRow);
+
+    if (images.length === 0) return product;
+    const signedUrls = await StorageService.getSignedUrls(images);
+    return { ...product, images: signedUrls };
   }
 
   static async softDelete(supplierId: string, productId: string): Promise<void> {
