@@ -14,6 +14,8 @@ const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
 const mockSoftDelete = jest.fn();
 const mockGetSupplierIdFromUserId = jest.fn();
+const mockUploadImage = jest.fn();
+const mockDeleteImage = jest.fn();
 
 jest.mock("../../src/services/supplierProduct.service", () => ({
   SupplierProductService: {
@@ -22,6 +24,8 @@ jest.mock("../../src/services/supplierProduct.service", () => ({
     update: mockUpdate,
     softDelete: mockSoftDelete,
     getSupplierIdFromUserId: mockGetSupplierIdFromUserId,
+    uploadImage: mockUploadImage,
+    deleteImage: mockDeleteImage,
   },
 }));
 
@@ -555,5 +559,123 @@ describe("DELETE /api/suppliers/products/:id", () => {
 
     expect(res.status).toBe(401);
     expect(mockSoftDelete).not.toHaveBeenCalled();
+  });
+});
+
+// ─── POST /api/suppliers/products/:id/images ────────────────────────────────
+
+describe("POST /api/suppliers/products/:id/images", () => {
+  const fakeImageBuffer = Buffer.from("fake-image-data");
+
+  it("uploads valid image and returns 201 with updated product", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const updatedProduct = {
+      ...sampleProduct,
+      images: ["https://signed.example.com/image1.jpg"],
+    };
+    mockUploadImage.mockResolvedValue(updatedProduct);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", fakeImageBuffer, { filename: "test.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.images).toHaveLength(1);
+    expect(mockUploadImage).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      PRODUCT_ID,
+      expect.objectContaining({ mimetype: "image/jpeg" }),
+    );
+  });
+
+  it("returns 400 for invalid file type", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", fakeImageBuffer, { filename: "test.gif", contentType: "image/gif" });
+
+    expect(res.status).toBe(400);
+    expect(mockUploadImage).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for file exceeding 5MB", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+
+    const largeBuffer = Buffer.alloc(6 * 1024 * 1024);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", largeBuffer, { filename: "large.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+    expect(mockUploadImage).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when product already has 5 images", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("Maximum 5 images per product");
+    Object.assign(err, { code: "BAD_REQUEST", statusCode: 400, name: "AppError" });
+    mockUploadImage.mockRejectedValue(err);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", fakeImageBuffer, { filename: "test.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 403 when non-owner supplier tries to upload", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue("c0000000-0000-4000-8000-000000000003");
+    const err = new Error("Not authorized to upload images for this product");
+    Object.assign(err, { code: "FORBIDDEN", statusCode: 403, name: "AppError" });
+    mockUploadImage.mockRejectedValue(err);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", fakeImageBuffer, { filename: "test.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(403);
+  });
+});
+
+// ─── DELETE /api/suppliers/products/:id/images/:imageIndex ──────────────────
+
+describe("DELETE /api/suppliers/products/:id/images/:imageIndex", () => {
+  it("deletes image and returns 200 with updated product", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const updatedProduct = { ...sampleProduct, images: [] };
+    mockDeleteImage.mockResolvedValue(updatedProduct);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}/images/0`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.images).toHaveLength(0);
+    expect(mockDeleteImage).toHaveBeenCalledWith(SUPPLIER_ID, PRODUCT_ID, 0);
+  });
+
+  it("returns 400 for out-of-bounds image index", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("Image index out of range");
+    Object.assign(err, { code: "BAD_REQUEST", statusCode: 400, name: "AppError" });
+    mockDeleteImage.mockRejectedValue(err);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}/images/99`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
   });
 });
