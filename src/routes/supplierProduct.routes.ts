@@ -9,6 +9,35 @@ const router = Router();
 
 /**
  * @openapi
+ * /suppliers/products/stats:
+ *   get:
+ *     summary: Get aggregate stats for the supplier's products
+ *     tags: [Supplier Products]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Aggregate product stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_products: { type: integer }
+ *                 active_count: { type: integer }
+ *                 pending_count: { type: integer }
+ *                 rejected_count: { type: integer }
+ *                 out_of_stock_count: { type: integer }
+ *                 total_inventory_value: { type: number }
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier role required
+ */
+router.get("/stats", authenticate, authorize("supplier"), SupplierProductController.getStats);
+
+/**
+ * @openapi
  * /suppliers/products:
  *   get:
  *     summary: List supplier's own products

@@ -16,6 +16,7 @@ const mockSoftDelete = jest.fn();
 const mockGetSupplierIdFromUserId = jest.fn();
 const mockUploadImage = jest.fn();
 const mockDeleteImage = jest.fn();
+const mockGetStats = jest.fn();
 
 jest.mock("../../src/services/supplierProduct.service", () => ({
   SupplierProductService: {
@@ -26,6 +27,7 @@ jest.mock("../../src/services/supplierProduct.service", () => ({
     getSupplierIdFromUserId: mockGetSupplierIdFromUserId,
     uploadImage: mockUploadImage,
     deleteImage: mockDeleteImage,
+    getStats: mockGetStats,
   },
 }));
 
@@ -677,5 +679,272 @@ describe("DELETE /api/suppliers/products/:id/images/:imageIndex", () => {
       .set("Authorization", "Bearer valid-token");
 
     expect(res.status).toBe(400);
+  });
+});
+
+// ─── GET /api/suppliers/products — advanced filters (Tier 2) ────────────────
+
+describe("GET /api/suppliers/products — advanced filters", () => {
+  const makeListResponse = (products: (typeof sampleProduct)[]) => ({
+    products,
+    pagination: { page: 1, limit: 20, total: products.length, total_pages: 1 },
+    filters_applied: {},
+  });
+
+  it("filters by status=active and returns matching products", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const activeProduct = { ...sampleProduct, status: "active" };
+    mockList.mockResolvedValue({
+      ...makeListResponse([activeProduct]),
+      filters_applied: { status: "active" },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?status=active")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.filters_applied).toEqual({ status: "active" });
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ status: "active" }),
+    );
+  });
+
+  it("filters by in_stock=true and passes correct param to service", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { in_stock: true },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?in_stock=true")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(SUPPLIER_ID, expect.objectContaining({ in_stock: true }));
+    expect(res.body.filters_applied.in_stock).toBe(true);
+  });
+
+  it("filters by price range (price_min + price_max)", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { price_min: 10, price_max: 50 },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?price_min=10&price_max=50")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ price_min: 10, price_max: 50 }),
+    );
+  });
+
+  it("searches by name (case-insensitive via service)", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { search: "Gloves" },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?search=Gloves")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ search: "Gloves" }),
+    );
+  });
+
+  it("applies combined filters and returns intersection", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { status: "active", category: "Surgical Supplies", in_stock: true },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?status=active&category=Surgical+Supplies&in_stock=true")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({
+        status: "active",
+        category: "Surgical Supplies",
+        in_stock: true,
+      }),
+    );
+  });
+
+  it("sorts by price ascending", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { sort_by: "price", sort_order: "asc" },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?sort_by=price&sort_order=asc")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ sort_by: "price", sort_order: "asc" }),
+    );
+  });
+
+  it("sorts by name descending", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue(makeListResponse([]));
+
+    const res = await request(app)
+      .get("/api/suppliers/products?sort_by=name&sort_order=desc")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ sort_by: "name", sort_order: "desc" }),
+    );
+  });
+
+  it("sorts by stock_quantity ascending", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue(makeListResponse([]));
+
+    const res = await request(app)
+      .get("/api/suppliers/products?sort_by=stock_quantity&sort_order=asc")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ sort_by: "stock_quantity", sort_order: "asc" }),
+    );
+  });
+
+  it("returns 400 for invalid sort_by value", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+    const res = await request(app)
+      .get("/api/suppliers/products?sort_by=invalid_field")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+    expect(mockList).not.toHaveBeenCalled();
+  });
+
+  it("pagination total reflects filtered count", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      products: [sampleProduct],
+      pagination: { page: 2, limit: 5, total: 11, total_pages: 3 },
+      filters_applied: { status: "active" },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?status=active&page=2&limit=5")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.pagination).toEqual({ page: 2, limit: 5, total: 11, total_pages: 3 });
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ status: "active", page: 2, limit: 5 }),
+    );
+  });
+});
+
+// ─── GET /api/suppliers/products/stats ──────────────────────────────────────
+
+describe("GET /api/suppliers/products/stats", () => {
+  const sampleStats = {
+    total_products: 10,
+    active_count: 5,
+    pending_count: 2,
+    rejected_count: 1,
+    out_of_stock_count: 3,
+    total_inventory_value: 1250.0,
+  };
+
+  it("returns 200 with correct aggregate stats", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockGetStats.mockResolvedValue(sampleStats);
+
+    const res = await request(app)
+      .get("/api/suppliers/products/stats")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(sampleStats);
+    expect(mockGetStats).toHaveBeenCalledWith(SUPPLIER_ID);
+  });
+
+  it("stats are isolated to this supplier (service called with correct supplierId)", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    const otherSupplierId = "c0000000-0000-4000-8000-000000000003";
+    mockGetSupplierIdFromUserId.mockResolvedValue(otherSupplierId);
+    mockGetStats.mockResolvedValue({ ...sampleStats, total_products: 2, active_count: 2 });
+
+    const res = await request(app)
+      .get("/api/suppliers/products/stats")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockGetStats).toHaveBeenCalledWith(otherSupplierId);
+    expect(mockGetStats).not.toHaveBeenCalledWith(SUPPLIER_ID);
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).get("/api/suppliers/products/stats");
+
+    expect(res.status).toBe(401);
+    expect(mockGetStats).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when customer tries to access stats", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+
+    const res = await request(app)
+      .get("/api/suppliers/products/stats")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+    expect(mockGetStats).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when supplier is not approved", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    const err = new Error("Supplier not approved");
+    Object.assign(err, { code: "FORBIDDEN", statusCode: 403, name: "AppError" });
+    mockGetSupplierIdFromUserId.mockRejectedValue(err);
+
+    const res = await request(app)
+      .get("/api/suppliers/products/stats")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+    expect(mockGetStats).not.toHaveBeenCalled();
   });
 });
