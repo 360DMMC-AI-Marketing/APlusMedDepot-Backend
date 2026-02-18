@@ -17,6 +17,7 @@ import supplierRoutes from "./routes/suppliers";
 import adminRoutes from "./routes/admin";
 import adminSupplierRoutes from "./routes/adminSuppliers";
 import checkoutRoutes from "./routes/checkout.routes";
+import supplierProductRoutes from "./routes/supplierProduct.routes";
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/suppliers/products", supplierProductRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin/suppliers", adminSupplierRoutes);
