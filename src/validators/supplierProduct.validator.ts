@@ -32,6 +32,16 @@ export const supplierProductQuerySchema = z.object({
   status: supplierProductStatusEnum.optional(),
   search: z.string().optional(),
   category: z.string().optional(),
+  sort_by: z.enum(["name", "price", "stock_quantity", "created_at"]).default("created_at"),
+  sort_order: z.enum(["asc", "desc"]).default("desc"),
+  in_stock: z
+    .preprocess(
+      (v) => (v === "true" ? true : v === "false" ? false : undefined),
+      z.boolean().optional(),
+    )
+    .optional(),
+  price_min: z.coerce.number().nonnegative("price_min must be non-negative").optional(),
+  price_max: z.coerce.number().nonnegative("price_max must be non-negative").optional(),
 });
 
 export type SupplierProductQueryInput = z.infer<typeof supplierProductQuerySchema>;

@@ -3,8 +3,38 @@ import { Router } from "express";
 import { SupplierProductController } from "../controllers/supplierProduct.controller";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
+import { uploadSingle } from "../middleware/upload";
 
 const router = Router();
+
+/**
+ * @openapi
+ * /suppliers/products/stats:
+ *   get:
+ *     summary: Get aggregate stats for the supplier's products
+ *     tags: [Supplier Products]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Aggregate product stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_products: { type: integer }
+ *                 active_count: { type: integer }
+ *                 pending_count: { type: integer }
+ *                 rejected_count: { type: integer }
+ *                 out_of_stock_count: { type: integer }
+ *                 total_inventory_value: { type: number }
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier role required
+ */
+router.get("/stats", authenticate, authorize("supplier"), SupplierProductController.getStats);
 
 /**
  * @openapi
@@ -134,5 +164,86 @@ router.put("/:id", authenticate, authorize("supplier"), SupplierProductControlle
  *         description: Product not found
  */
 router.delete("/:id", authenticate, authorize("supplier"), SupplierProductController.softDelete);
+
+/**
+ * @openapi
+ * /suppliers/products/{id}/images:
+ *   post:
+ *     summary: Upload an image for a supplier product
+ *     tags: [Supplier Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [image]
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image file (JPEG, PNG, WebP). Max 5MB.
+ *     responses:
+ *       201:
+ *         description: Image uploaded, returns updated product
+ *       400:
+ *         description: Invalid file type, file too large, or already 5 images
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - not product owner
+ *       404:
+ *         description: Product not found
+ */
+router.post(
+  "/:id/images",
+  authenticate,
+  authorize("supplier"),
+  uploadSingle,
+  SupplierProductController.uploadImage,
+);
+
+/**
+ * @openapi
+ * /suppliers/products/{id}/images/{imageIndex}:
+ *   delete:
+ *     summary: Delete an image from a supplier product
+ *     tags: [Supplier Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: imageIndex
+ *         required: true
+ *         schema: { type: integer, minimum: 0 }
+ *     responses:
+ *       200:
+ *         description: Image deleted, returns updated product
+ *       400:
+ *         description: Image index out of range
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - not product owner
+ *       404:
+ *         description: Product not found
+ */
+router.delete(
+  "/:id/images/:imageIndex",
+  authenticate,
+  authorize("supplier"),
+  SupplierProductController.deleteImage,
+);
 
 export default router;

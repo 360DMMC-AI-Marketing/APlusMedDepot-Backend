@@ -1,8 +1,10 @@
 import { supabaseAdmin } from "../config/supabase";
 import { notFound, forbidden, conflict, badRequest, AppError } from "../utils/errors";
+import { StorageService } from "./storage.service";
 import type {
   SupplierProduct,
   SupplierProductListResponse,
+  SupplierProductStats,
   CreateSupplierProductRequest,
   UpdateSupplierProductRequest,
 } from "../types/supplierProduct.types";
@@ -78,7 +80,18 @@ export class SupplierProductService {
     supplierId: string,
     query: SupplierProductQueryInput,
   ): Promise<SupplierProductListResponse> {
-    const { page, limit, status, search, category } = query;
+    const {
+      page,
+      limit,
+      status,
+      search,
+      category,
+      sort_by,
+      sort_order,
+      in_stock,
+      price_min,
+      price_max,
+    } = query;
 
     let q = supabaseAdmin
       .from("products")
@@ -98,10 +111,24 @@ export class SupplierProductService {
       q = q.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
+    if (in_stock === true) {
+      q = q.gt("stock_quantity", 0);
+    } else if (in_stock === false) {
+      q = q.eq("stock_quantity", 0);
+    }
+
+    if (price_min !== undefined) {
+      q = q.gte("price", price_min);
+    }
+
+    if (price_max !== undefined) {
+      q = q.lte("price", price_max);
+    }
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    q = q.order("created_at", { ascending: false }).range(from, to);
+    q = q.order(sort_by, { ascending: sort_order === "asc" }).range(from, to);
 
     const { data, error, count } = await q;
 
@@ -112,6 +139,16 @@ export class SupplierProductService {
     const total = count ?? 0;
     const products = ((data as unknown as ProductRow[] | null) ?? []).map(toSupplierProduct);
 
+    const filters_applied: Record<string, unknown> = {};
+    if (status && status !== "all") filters_applied.status = status;
+    if (category) filters_applied.category = category;
+    if (search) filters_applied.search = search;
+    if (in_stock !== undefined) filters_applied.in_stock = in_stock;
+    if (price_min !== undefined) filters_applied.price_min = price_min;
+    if (price_max !== undefined) filters_applied.price_max = price_max;
+    if (sort_by !== "created_at") filters_applied.sort_by = sort_by;
+    if (sort_order !== "desc") filters_applied.sort_order = sort_order;
+
     return {
       products,
       pagination: {
@@ -120,6 +157,30 @@ export class SupplierProductService {
         total,
         total_pages: Math.ceil(total / limit),
       },
+      filters_applied,
+    };
+  }
+
+  static async getStats(supplierId: string): Promise<SupplierProductStats> {
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .select("status, price, stock_quantity")
+      .eq("supplier_id", supplierId)
+      .eq("is_deleted", false);
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    const rows = (data as Array<{ status: string; price: string; stock_quantity: number }>) ?? [];
+
+    return {
+      total_products: rows.length,
+      active_count: rows.filter((r) => r.status === "active").length,
+      pending_count: rows.filter((r) => r.status === "pending").length,
+      rejected_count: rows.filter((r) => r.status === "rejected").length,
+      out_of_stock_count: rows.filter((r) => r.stock_quantity === 0).length,
+      total_inventory_value: rows.reduce((sum, r) => sum + Number(r.price) * r.stock_quantity, 0),
     };
   }
 
@@ -276,6 +337,126 @@ export class SupplierProductService {
     }
 
     return toSupplierProduct(data as unknown as ProductRow);
+  }
+
+  static async uploadImage(
+    supplierId: string,
+    productId: string,
+    file: Express.Multer.File,
+  ): Promise<SupplierProduct> {
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from("products")
+      .select("id, supplier_id, images")
+      .eq("id", productId)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (fetchError) {
+      throw new AppError(fetchError.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!existing) {
+      throw notFound("Product");
+    }
+
+    const row = existing as { id: string; supplier_id: string; images: string[] | null };
+
+    if (row.supplier_id !== supplierId) {
+      throw forbidden("Not authorized to upload images for this product");
+    }
+
+    const currentImages = row.images ?? [];
+    if (currentImages.length >= 5) {
+      throw badRequest("Maximum 5 images per product");
+    }
+
+    const storagePath = await StorageService.uploadImage(
+      file.buffer,
+      file.originalname,
+      file.mimetype,
+      productId,
+      supplierId,
+    );
+
+    const updatedImages = [...currentImages, storagePath];
+
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .update({ images: updatedImages })
+      .eq("id", productId)
+      .select(PRODUCT_SELECT_FIELDS)
+      .single();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!data) {
+      throw new AppError("Failed to update product images", 500, "DATABASE_ERROR");
+    }
+
+    const product = toSupplierProduct(data as unknown as ProductRow);
+    const signedUrls = await StorageService.getSignedUrls(updatedImages);
+    return { ...product, images: signedUrls };
+  }
+
+  static async deleteImage(
+    supplierId: string,
+    productId: string,
+    imageIndex: number,
+  ): Promise<SupplierProduct> {
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from("products")
+      .select("id, supplier_id, images")
+      .eq("id", productId)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (fetchError) {
+      throw new AppError(fetchError.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!existing) {
+      throw notFound("Product");
+    }
+
+    const row = existing as { id: string; supplier_id: string; images: string[] | null };
+
+    if (row.supplier_id !== supplierId) {
+      throw forbidden("Not authorized to delete images for this product");
+    }
+
+    const images = [...(row.images ?? [])];
+
+    if (imageIndex < 0 || imageIndex >= images.length) {
+      throw badRequest("Image index out of range");
+    }
+
+    const storagePath = images[imageIndex];
+    images.splice(imageIndex, 1);
+
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .update({ images })
+      .eq("id", productId)
+      .select(PRODUCT_SELECT_FIELDS)
+      .single();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    if (!data) {
+      throw new AppError("Failed to update product images", 500, "DATABASE_ERROR");
+    }
+
+    await StorageService.deleteImage(storagePath);
+
+    const product = toSupplierProduct(data as unknown as ProductRow);
+
+    if (images.length === 0) return product;
+    const signedUrls = await StorageService.getSignedUrls(images);
+    return { ...product, images: signedUrls };
   }
 
   static async softDelete(supplierId: string, productId: string): Promise<void> {
