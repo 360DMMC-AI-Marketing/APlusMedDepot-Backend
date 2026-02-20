@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { SupplierProductController } from "../controllers/supplierProduct.controller";
+import { SupplierAnalyticsController } from "../controllers/supplierAnalytics.controller";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
 import { uploadSingle } from "../middleware/upload";
@@ -136,6 +137,13 @@ router.post("/", authenticate, authorize("supplier"), SupplierProductController.
  *       409:
  *         description: SKU already exists for this supplier
  */
+router.get(
+  "/:id/analytics",
+  authenticate,
+  authorize("supplier"),
+  SupplierAnalyticsController.getProductAnalytics,
+);
+
 router.put("/:id", authenticate, authorize("supplier"), SupplierProductController.update);
 
 /**
