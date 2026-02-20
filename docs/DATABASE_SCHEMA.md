@@ -4,7 +4,7 @@
 
 PostgreSQL database for a multi-vendor medical supplies marketplace. All tables use UUID primary keys with `gen_random_uuid()` and automatic `updated_at` timestamps via trigger.
 
-**Migration order:** 000 → 001 → 002 → ... → 013 (FK dependencies are satisfied sequentially).
+**Migration order:** 000 → 001 → 002 → ... → 019 (FK dependencies are satisfied sequentially).
 
 **Note:** `commission_rate` is stored as a percentage everywhere (15.00 = 15%), not a decimal fraction.
 
@@ -112,14 +112,25 @@ Medical supply items listed by suppliers.
 | price | DECIMAL(10,2) | NOT NULL, CHECK > 0 |
 | stock_quantity | INTEGER | NOT NULL, DEFAULT 0, CHECK >= 0 |
 | category | VARCHAR | nullable |
-| status | VARCHAR | NOT NULL, DEFAULT 'draft', CHECK IN ('draft', 'pending_review', 'active', 'inactive', 'out_of_stock') |
+| status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'active', 'inactive', 'rejected', 'needs_revision') |
 | images | JSONB | DEFAULT '[]' |
 | specifications | JSONB | DEFAULT '{}' |
 | weight | DECIMAL(8,2) | nullable |
 | dimensions | JSONB | nullable |
 | is_deleted | BOOLEAN | DEFAULT false |
+| low_stock_threshold | INTEGER | NOT NULL, DEFAULT 10 |
+| last_restocked_at | TIMESTAMPTZ | nullable |
+| reviewed_by | UUID | FK → users(id), nullable |
+| reviewed_at | TIMESTAMPTZ | nullable |
+| admin_feedback | TEXT | nullable |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
+
+**Status values:** `pending` (newly submitted, awaiting review) → `active` (approved, listed) / `rejected` (admin rejected) / `needs_revision` (admin requested changes). `inactive` (supplier-deactivated). Updated from legacy values in migration 017.
+
+**Inventory columns:** `low_stock_threshold` and `last_restocked_at` added in migration 018 for supplier inventory management.
+
+**Review columns:** `reviewed_by`, `reviewed_at`, `admin_feedback` added in migration 019 for admin product approval workflow.
 
 **Trigger:** `set_products_updated_at`
 
@@ -293,9 +304,28 @@ Monthly supplier payout records.
 
 ---
 
+### 11. stock_audit_log
+
+Audit trail for all stock quantity changes (supplier updates, bulk updates, order decrements, refunds).
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() |
+| product_id | UUID | NOT NULL, FK → products(id) ON DELETE CASCADE |
+| supplier_id | UUID | NOT NULL, FK → suppliers(id) ON DELETE CASCADE |
+| old_quantity | INTEGER | NOT NULL |
+| new_quantity | INTEGER | NOT NULL |
+| change_source | VARCHAR(50) | NOT NULL, DEFAULT 'supplier_update', CHECK IN ('supplier_update', 'bulk_update', 'order_decrement', 'order_refund') |
+| changed_by | UUID | FK → users(id), nullable |
+| changed_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
+
+**No updated_at trigger** — audit log entries are immutable (insert-only).
+
+---
+
 ## Indexes
 
-Indexes are created in `migrations/011_create_indexes.sql` and `migrations/013_align_supplier_schema.sql`.
+Indexes are created in `migrations/011_create_indexes.sql`, `migrations/013_align_supplier_schema.sql`, `migrations/018_supplier_inventory.sql`, and `migrations/019_product_approval_workflow.sql`.
 
 | Table | Index | Type | Column(s) / Expression |
 |-------|-------|------|------------------------|
@@ -333,6 +363,10 @@ Indexes are created in `migrations/011_create_indexes.sql` and `migrations/013_a
 | payouts | idx_payouts_supplier_id | B-tree | supplier_id |
 | payouts | idx_payouts_status | B-tree | status |
 | payouts | idx_payouts_payout_date | B-tree | payout_date |
+| products | idx_products_status_created | B-tree | (status, created_at ASC) |
+| stock_audit_log | idx_stock_audit_product_id | B-tree | product_id |
+| stock_audit_log | idx_stock_audit_supplier_id | B-tree | supplier_id |
+| stock_audit_log | idx_stock_audit_changed_at | B-tree | changed_at DESC |
 
 ---
 
@@ -355,7 +389,10 @@ orders 1──N payments           (order_id)
 order_items 1──1 commissions   (order_item_id, UNIQUE)
 suppliers 1──N commissions     (supplier_id)
 suppliers 1──N payouts         (supplier_id)
+products 1──N stock_audit_log  (product_id, ON DELETE CASCADE)
+suppliers 1──N stock_audit_log (supplier_id, ON DELETE CASCADE)
 users 1──0..1 suppliers.approved_by (approved_by)
+users 1──0..N products.reviewed_by (reviewed_by)
 ```
 
 ---
@@ -391,7 +428,10 @@ All helper functions use `SECURITY DEFINER` and `STABLE` to ensure they run with
 |--------|-----------|------|
 | `suppliers_select_own` | SELECT | `user_id = auth.uid()` — suppliers see their own profile |
 | `suppliers_update_own` | UPDATE | `user_id = auth.uid()` — suppliers edit their own profile |
+| `suppliers_insert_own` | INSERT | `user_id = auth.uid() AND user.role = 'supplier'` — suppliers create their own record during registration *(added in 014)* |
 | `suppliers_admin_all` | ALL | `is_admin()` — admins have full access |
+
+**Trigger:** `enforce_supplier_update_restrictions` — prevents suppliers from changing their own `status`, `commission_rate`, `approved_at`, `approved_by`, or `current_balance` *(added in 014)*.
 
 #### supplier_documents
 
@@ -399,32 +439,36 @@ All helper functions use `SECURITY DEFINER` and `STABLE` to ensure they run with
 |--------|-----------|------|
 | `supplier_documents_supplier_select` | SELECT | `supplier_id IN (SELECT id FROM suppliers WHERE user_id = auth.uid())` — suppliers see their own documents |
 | `supplier_documents_supplier_insert` | INSERT | `supplier_id IN (SELECT id FROM suppliers WHERE user_id = auth.uid())` — suppliers upload their own documents |
-| `supplier_documents_admin_all` | ALL | `EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')` — admins have full access |
+| `supplier_documents_supplier_update` | UPDATE | `supplier_id IN (SELECT id FROM suppliers WHERE user_id = auth.uid())` — suppliers can re-upload after rejection *(added in 014)* |
+| `supplier_documents_admin_all` | ALL | `is_admin()` — admins have full access |
+
+All supplier_documents policies were created/recreated in migration 014.
 
 #### products
 
 | Policy | Operation | Rule |
 |--------|-----------|------|
 | `products_select_active` | SELECT | `status = 'active' AND is_deleted = false` — any authenticated user sees active products |
-| `products_supplier_select_own` | SELECT | `supplier_id = get_supplier_id()` — suppliers see all their own (including draft/inactive) |
+| `products_supplier_select_own` | SELECT | `supplier_id = get_supplier_id()` — suppliers see all their own (including pending/rejected/needs_revision) |
 | `products_supplier_insert` | INSERT | `supplier_id = get_supplier_id()` — suppliers create their own products |
-| `products_supplier_update` | UPDATE | `supplier_id = get_supplier_id()` — suppliers edit their own products |
-| `products_supplier_delete` | UPDATE | `supplier_id = get_supplier_id()` — suppliers soft-delete their own products |
+| `products_supplier_update` | UPDATE | `supplier_id = get_supplier_id()` — suppliers edit their own products (also covers soft-delete via `is_deleted=true`) |
 | `products_admin_all` | ALL | `is_admin()` — admins have full access |
+
+**Note:** Redundant `products_supplier_delete` policy (identical to `products_supplier_update`) was removed in migration 017. All policies were idempotently re-declared in migration 017.
 
 #### carts
 
 | Policy | Operation | Rule |
 |--------|-----------|------|
 | `carts_customer_crud` | ALL | `customer_id = auth.uid()` — customers fully manage their own carts |
-| `carts_admin_select` | SELECT | `is_admin()` — admins can view all carts |
+| `carts_admin_all` | ALL | `is_admin()` — admins have full access *(upgraded from SELECT-only in 014)* |
 
 #### cart_items
 
 | Policy | Operation | Rule |
 |--------|-----------|------|
 | `cart_items_customer_crud` | ALL | `cart_id IN (SELECT id FROM carts WHERE customer_id = auth.uid())` — customers manage items in their own carts |
-| `cart_items_admin_select` | SELECT | `is_admin()` — admins can view all cart items |
+| `cart_items_admin_all` | ALL | `is_admin()` — admins have full access *(upgraded from SELECT-only in 014)* |
 
 #### orders
 
@@ -469,25 +513,49 @@ All helper functions use `SECURITY DEFINER` and `STABLE` to ensure they run with
 
 **No customer access** — customers cannot see payout data.
 
+#### stock_audit_log
+
+| Policy | Operation | Rule |
+|--------|-----------|------|
+| `stock_audit_supplier_select` | SELECT | `supplier_id = get_supplier_id()` — suppliers see audit logs for their own products |
+| `stock_audit_admin_all` | ALL | `is_admin()` — admins have full access |
+
+**No customer access** — customers cannot see stock audit logs.
+
 ### Cross-Tenant Access Prevention Summary
 
 | Data | Customer | Supplier | Admin |
 |------|----------|----------|-------|
 | Own user profile | Read/Update | Read/Update | Full |
 | Other user profiles | No | No | Full |
-| Supplier profile | No | Own only (R/U) | Full |
-| Supplier documents | No | Own only (R/Insert) | Full |
+| Supplier profile | No | Own only (R/U/Insert) | Full |
+| Supplier documents | No | Own only (R/Insert/Update) | Full |
 | Products (active) | Read | Read | Full |
-| Products (draft/inactive) | No | Own only | Full |
+| Products (pending/rejected) | No | Own only | Full |
 | Products (create/edit) | No | Own only | Full |
-| Carts | Own only (CRUD) | No | Read |
-| Cart items | Own only (CRUD) | No | Read |
+| Carts | Own only (CRUD) | No | Full |
+| Cart items | Own only (CRUD) | No | Full |
 | Orders (master) | Own only (Read) | No | Full |
 | Orders (sub-orders) | No | Own only (Read) | Full |
 | Order items | Own orders (Read) | Own items (Read) | Full |
 | Payments | Own orders (Read) | **No access** | Full |
 | Commissions | **No access** | Own only (Read) | Full |
 | Payouts | **No access** | Own only (Read) | Full |
+| Stock audit log | **No access** | Own only (Read) | Full |
+
+---
+
+## Database Functions
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `update_updated_at_column()` | TRIGGER | Auto-updates `updated_at` timestamp on row update |
+| `get_current_user_id()` | UUID | Returns `auth.uid()::uuid` |
+| `get_current_user_role()` | VARCHAR | Looks up role from users table for current auth user |
+| `is_admin()` | BOOLEAN | Returns true if current user's role = 'admin' |
+| `get_supplier_id()` | UUID | Returns the supplier.id for the current auth user |
+| `prevent_supplier_self_approval()` | TRIGGER | Prevents suppliers from changing status, commission_rate, approved_at, approved_by, current_balance |
+| `lock_products_for_update(product_ids UUID[])` | TABLE(id UUID, stock_quantity INTEGER) | SELECT ... FOR UPDATE with deterministic lock ordering to prevent deadlocks. Used by inventory management and checkout stock decrement. |
 
 ---
 
@@ -509,3 +577,7 @@ All helper functions use `SECURITY DEFINER` and `STABLE` to ensure they run with
 | 011_create_indexes.sql | All performance indexes |
 | 012_create_rls_policies.sql | RLS helper functions, enable RLS on all tables, all access policies |
 | 013_align_supplier_schema.sql | Align supplier schema: alter suppliers (JSONB address, percentage commission_rate, new columns), create supplier_documents, add shipping columns to order_items, update commissions (rename payout_status → status, add supplier_amount), add payout columns |
+| 014_fix_rls_policy_gaps.sql | Fix 4 RLS gaps: suppliers_insert_own, supplier_documents full policies, prevent_supplier_self_approval trigger, admin full access on carts/cart_items |
+| 017_audit_rls_supplier_products.sql | Update products status CHECK constraint (pending/active/inactive/rejected/needs_revision), remove redundant products_supplier_delete policy, idempotently re-declare all product policies |
+| 018_supplier_inventory.sql | Add low_stock_threshold + last_restocked_at to products, create stock_audit_log table with RLS, create lock_products_for_update() function |
+| 019_product_approval_workflow.sql | Add reviewed_by, reviewed_at, admin_feedback to products, add idx_products_status_created index |
