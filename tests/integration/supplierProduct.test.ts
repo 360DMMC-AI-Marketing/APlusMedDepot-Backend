@@ -31,6 +31,30 @@ jest.mock("../../src/services/supplierProduct.service", () => ({
   },
 }));
 
+jest.mock("../../src/services/product.service", () => ({
+  ProductService: {},
+}));
+
+jest.mock("../../src/services/storage.service", () => ({
+  StorageService: {},
+}));
+
+jest.mock("../../src/services/cart.service", () => ({
+  CartService: {},
+}));
+
+jest.mock("../../src/services/order.service", () => ({
+  OrderService: {},
+}));
+
+jest.mock("../../src/services/checkout.service", () => ({
+  CheckoutService: {},
+}));
+
+jest.mock("../../src/utils/inventory", () => ({
+  checkStock: jest.fn(),
+}));
+
 jest.mock(
   "express-rate-limit",
   () => () => (_req: unknown, _res: unknown, next: () => void) => next(),
@@ -633,6 +657,18 @@ describe("POST /api/suppliers/products/:id/images", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 when no file is attached", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+    expect(mockUploadImage).not.toHaveBeenCalled();
+  });
+
   it("returns 403 when non-owner supplier tries to upload", async () => {
     mockVerifyToken.mockResolvedValue(supplierUser);
     mockGetSupplierIdFromUserId.mockResolvedValue("c0000000-0000-4000-8000-000000000003");
@@ -665,6 +701,18 @@ describe("DELETE /api/suppliers/products/:id/images/:imageIndex", () => {
     expect(res.status).toBe(200);
     expect(res.body.images).toHaveLength(0);
     expect(mockDeleteImage).toHaveBeenCalledWith(SUPPLIER_ID, PRODUCT_ID, 0);
+  });
+
+  it("returns 400 for negative image index", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}/images/-1`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+    expect(mockDeleteImage).not.toHaveBeenCalled();
   });
 
   it("returns 400 for out-of-bounds image index", async () => {
