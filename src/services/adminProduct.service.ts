@@ -1,0 +1,450 @@
+import { supabaseAdmin } from "../config/supabase";
+import { sendEmail } from "./email.service";
+import { baseLayout, escapeHtml } from "../templates/baseLayout";
+import { AppError, notFound, badRequest } from "../utils/errors";
+
+interface ProductRow {
+  id: string;
+  supplier_id: string;
+  name: string;
+  description: string | null;
+  sku: string;
+  price: string;
+  stock_quantity: number;
+  category: string | null;
+  status: string;
+  images: string[] | null;
+  specifications: Record<string, string> | null;
+  weight: string | null;
+  dimensions: { length?: number; width?: number; height?: number } | null;
+  is_deleted: boolean;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_feedback: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface SupplierInfo {
+  id: string;
+  business_name: string;
+  contact_email: string;
+}
+
+export interface PendingProduct {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  category: string | null;
+  images: string[] | null;
+  created_at: string;
+  supplier: { id: string; business_name: string };
+}
+
+export interface PendingListResponse {
+  products: PendingProduct[];
+  pagination: { page: number; limit: number; total: number; total_pages: number };
+}
+
+export interface ProductReviewDetail {
+  id: string;
+  supplier_id: string;
+  name: string;
+  description: string | null;
+  sku: string;
+  price: number;
+  stock_quantity: number;
+  category: string | null;
+  status: string;
+  images: string[] | null;
+  specifications: Record<string, string> | null;
+  weight: number | null;
+  dimensions: { length?: number; width?: number; height?: number } | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_feedback: string | null;
+  created_at: string;
+  updated_at: string;
+  supplier: { id: string; business_name: string; contact_email: string };
+  review_history: Array<{
+    action: string;
+    admin_feedback: string | null;
+    reviewed_at: string | null;
+    reviewed_by: string | null;
+  }>;
+}
+
+export interface ReviewedProduct {
+  id: string;
+  name: string;
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_feedback: string | null;
+}
+
+const PRODUCT_REVIEW_FIELDS =
+  "id, supplier_id, name, description, sku, price, stock_quantity, category, status, images, specifications, weight, dimensions, is_deleted, reviewed_by, reviewed_at, admin_feedback, created_at, updated_at";
+
+export class AdminProductService {
+  /**
+   * GET /api/admin/products/pending
+   */
+  static async listPending(page: number, limit: number): Promise<PendingListResponse> {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data, error, count } = await supabaseAdmin
+      .from("products")
+      .select("id, name, sku, price, category, images, created_at, supplier_id", { count: "exact" })
+      .eq("status", "pending")
+      .eq("is_deleted", false)
+      .order("created_at", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    const rows = (data ?? []) as Array<{
+      id: string;
+      name: string;
+      sku: string;
+      price: string;
+      category: string | null;
+      images: string[] | null;
+      created_at: string;
+      supplier_id: string;
+    }>;
+
+    // Fetch supplier info for each unique supplier_id
+    const supplierIds = [...new Set(rows.map((r) => r.supplier_id))];
+    const supplierMap = new Map<string, { id: string; business_name: string }>();
+
+    if (supplierIds.length > 0) {
+      const { data: suppliers } = await supabaseAdmin
+        .from("suppliers")
+        .select("id, business_name")
+        .in("id", supplierIds);
+
+      for (const s of (suppliers ?? []) as Array<{ id: string; business_name: string }>) {
+        supplierMap.set(s.id, { id: s.id, business_name: s.business_name });
+      }
+    }
+
+    const total = count ?? 0;
+    const products: PendingProduct[] = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      sku: r.sku,
+      price: Number(r.price),
+      category: r.category,
+      images: r.images,
+      created_at: r.created_at,
+      supplier: supplierMap.get(r.supplier_id) ?? { id: r.supplier_id, business_name: "Unknown" },
+    }));
+
+    return {
+      products,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * GET /api/admin/products/:id/review
+   */
+  static async getReviewDetail(productId: string): Promise<ProductReviewDetail> {
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .select(PRODUCT_REVIEW_FIELDS)
+      .eq("id", productId)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+    if (!data) {
+      throw notFound("Product");
+    }
+
+    const row = data as unknown as ProductRow;
+
+    // Fetch supplier info
+    const { data: supplierData, error: supplierError } = await supabaseAdmin
+      .from("suppliers")
+      .select("id, business_name, contact_email")
+      .eq("id", row.supplier_id)
+      .single();
+
+    if (supplierError || !supplierData) {
+      throw new AppError("Supplier not found for product", 500, "DATABASE_ERROR");
+    }
+
+    const supplier = supplierData as SupplierInfo;
+
+    // Build review_history from the current review state.
+    // A simple representation: if reviewed_at is set, there's a review entry.
+    const review_history: ProductReviewDetail["review_history"] = [];
+    if (row.reviewed_at) {
+      review_history.push({
+        action:
+          row.status === "active"
+            ? "approved"
+            : row.status === "rejected"
+              ? "rejected"
+              : "request_changes",
+        admin_feedback: row.admin_feedback,
+        reviewed_at: row.reviewed_at,
+        reviewed_by: row.reviewed_by,
+      });
+    }
+
+    return {
+      id: row.id,
+      supplier_id: row.supplier_id,
+      name: row.name,
+      description: row.description,
+      sku: row.sku,
+      price: Number(row.price),
+      stock_quantity: row.stock_quantity,
+      category: row.category,
+      status: row.status,
+      images: row.images,
+      specifications: row.specifications,
+      weight: row.weight !== null ? Number(row.weight) : null,
+      dimensions: row.dimensions,
+      reviewed_by: row.reviewed_by,
+      reviewed_at: row.reviewed_at,
+      admin_feedback: row.admin_feedback,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      supplier: {
+        id: supplier.id,
+        business_name: supplier.business_name,
+        contact_email: supplier.contact_email,
+      },
+      review_history,
+    };
+  }
+
+  /**
+   * PUT /api/admin/products/:id/approve
+   */
+  static async approve(productId: string, adminUserId: string): Promise<ReviewedProduct> {
+    const product = await this.getProductForReview(productId);
+
+    if (product.status !== "pending") {
+      throw badRequest(
+        `Cannot approve product with status '${product.status}'. Only pending products can be approved.`,
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .update({
+        status: "active",
+        reviewed_by: adminUserId,
+        reviewed_at: now,
+        admin_feedback: null,
+      })
+      .eq("id", productId)
+      .select("id, name, status, reviewed_by, reviewed_at, admin_feedback")
+      .single();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    // Send email to supplier
+    const supplierEmail = await this.getSupplierEmail(product.supplier_id);
+    if (supplierEmail) {
+      const html = baseLayout({
+        title: "Product Approved",
+        preheader: `Your product "${product.name}" has been approved`,
+        body: `
+          <p>Your product <strong>${escapeHtml(product.name)}</strong> has been approved and is now live on the marketplace.</p>
+          <p><strong>SKU:</strong> ${escapeHtml(product.sku)}</p>
+          <p>Customers can now find and purchase your product.</p>
+        `,
+      });
+      void sendEmail(supplierEmail, `Product Approved: ${product.name}`, html);
+    }
+
+    const row = data as {
+      id: string;
+      name: string;
+      status: string;
+      reviewed_by: string | null;
+      reviewed_at: string | null;
+      admin_feedback: string | null;
+    };
+    return row;
+  }
+
+  /**
+   * PUT /api/admin/products/:id/request-changes
+   */
+  static async requestChanges(
+    productId: string,
+    adminUserId: string,
+    feedback: string,
+  ): Promise<ReviewedProduct> {
+    const product = await this.getProductForReview(productId);
+
+    if (product.status !== "pending") {
+      throw badRequest(
+        `Cannot request changes for product with status '${product.status}'. Only pending products can receive change requests.`,
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .update({
+        status: "needs_revision",
+        reviewed_by: adminUserId,
+        reviewed_at: now,
+        admin_feedback: feedback,
+      })
+      .eq("id", productId)
+      .select("id, name, status, reviewed_by, reviewed_at, admin_feedback")
+      .single();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    // Send email to supplier with feedback
+    const supplierEmail = await this.getSupplierEmail(product.supplier_id);
+    if (supplierEmail) {
+      const html = baseLayout({
+        title: "Product Changes Requested",
+        preheader: `Changes requested for "${product.name}"`,
+        body: `
+          <p>An admin has requested changes to your product <strong>${escapeHtml(product.name)}</strong>.</p>
+          <p><strong>SKU:</strong> ${escapeHtml(product.sku)}</p>
+          <p><strong>Feedback:</strong></p>
+          <blockquote style="border-left: 3px solid #ccc; padding-left: 12px; color: #555;">${escapeHtml(feedback)}</blockquote>
+          <p>Please update your product and resubmit for review.</p>
+        `,
+      });
+      void sendEmail(supplierEmail, `Changes Requested: ${product.name}`, html);
+    }
+
+    const row = data as {
+      id: string;
+      name: string;
+      status: string;
+      reviewed_by: string | null;
+      reviewed_at: string | null;
+      admin_feedback: string | null;
+    };
+    return row;
+  }
+
+  /**
+   * PUT /api/admin/products/:id/reject
+   */
+  static async reject(
+    productId: string,
+    adminUserId: string,
+    reason: string,
+  ): Promise<ReviewedProduct> {
+    const product = await this.getProductForReview(productId);
+
+    if (product.status !== "pending") {
+      throw badRequest(
+        `Cannot reject product with status '${product.status}'. Only pending products can be rejected.`,
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .update({
+        status: "rejected",
+        reviewed_by: adminUserId,
+        reviewed_at: now,
+        admin_feedback: reason,
+      })
+      .eq("id", productId)
+      .select("id, name, status, reviewed_by, reviewed_at, admin_feedback")
+      .single();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    // Send email to supplier with rejection reason
+    const supplierEmail = await this.getSupplierEmail(product.supplier_id);
+    if (supplierEmail) {
+      const html = baseLayout({
+        title: "Product Rejected",
+        preheader: `Your product "${product.name}" was not approved`,
+        body: `
+          <p>Your product <strong>${escapeHtml(product.name)}</strong> has been rejected.</p>
+          <p><strong>SKU:</strong> ${escapeHtml(product.sku)}</p>
+          <p><strong>Reason:</strong></p>
+          <blockquote style="border-left: 3px solid #ccc; padding-left: 12px; color: #555;">${escapeHtml(reason)}</blockquote>
+          <p>You may edit and resubmit the product for review.</p>
+        `,
+      });
+      void sendEmail(supplierEmail, `Product Rejected: ${product.name}`, html);
+    }
+
+    const row = data as {
+      id: string;
+      name: string;
+      status: string;
+      reviewed_by: string | null;
+      reviewed_at: string | null;
+      admin_feedback: string | null;
+    };
+    return row;
+  }
+
+  // -----------------------------------------------------------------------
+  // Private helpers
+  // -----------------------------------------------------------------------
+
+  private static async getProductForReview(
+    productId: string,
+  ): Promise<{ id: string; supplier_id: string; name: string; sku: string; status: string }> {
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .select("id, supplier_id, name, sku, status")
+      .eq("id", productId)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+    if (!data) {
+      throw notFound("Product");
+    }
+
+    return data as { id: string; supplier_id: string; name: string; sku: string; status: string };
+  }
+
+  private static async getSupplierEmail(supplierId: string): Promise<string | null> {
+    const { data } = await supabaseAdmin
+      .from("suppliers")
+      .select("contact_email")
+      .eq("id", supplierId)
+      .maybeSingle();
+
+    return (data as { contact_email: string } | null)?.contact_email ?? null;
+  }
+}

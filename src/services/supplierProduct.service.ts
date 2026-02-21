@@ -4,6 +4,7 @@ import { StorageService } from "./storage.service";
 import type {
   SupplierProduct,
   SupplierProductListResponse,
+  SupplierProductStats,
   CreateSupplierProductRequest,
   UpdateSupplierProductRequest,
 } from "../types/supplierProduct.types";
@@ -79,7 +80,18 @@ export class SupplierProductService {
     supplierId: string,
     query: SupplierProductQueryInput,
   ): Promise<SupplierProductListResponse> {
-    const { page, limit, status, search, category } = query;
+    const {
+      page,
+      limit,
+      status,
+      search,
+      category,
+      sort_by,
+      sort_order,
+      in_stock,
+      price_min,
+      price_max,
+    } = query;
 
     let q = supabaseAdmin
       .from("products")
@@ -99,10 +111,24 @@ export class SupplierProductService {
       q = q.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
+    if (in_stock === true) {
+      q = q.gt("stock_quantity", 0);
+    } else if (in_stock === false) {
+      q = q.eq("stock_quantity", 0);
+    }
+
+    if (price_min !== undefined) {
+      q = q.gte("price", price_min);
+    }
+
+    if (price_max !== undefined) {
+      q = q.lte("price", price_max);
+    }
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    q = q.order("created_at", { ascending: false }).range(from, to);
+    q = q.order(sort_by, { ascending: sort_order === "asc" }).range(from, to);
 
     const { data, error, count } = await q;
 
@@ -113,6 +139,16 @@ export class SupplierProductService {
     const total = count ?? 0;
     const products = ((data as unknown as ProductRow[] | null) ?? []).map(toSupplierProduct);
 
+    const filters_applied: Record<string, unknown> = {};
+    if (status && status !== "all") filters_applied.status = status;
+    if (category) filters_applied.category = category;
+    if (search) filters_applied.search = search;
+    if (in_stock !== undefined) filters_applied.in_stock = in_stock;
+    if (price_min !== undefined) filters_applied.price_min = price_min;
+    if (price_max !== undefined) filters_applied.price_max = price_max;
+    if (sort_by !== "created_at") filters_applied.sort_by = sort_by;
+    if (sort_order !== "desc") filters_applied.sort_order = sort_order;
+
     return {
       products,
       pagination: {
@@ -121,6 +157,30 @@ export class SupplierProductService {
         total,
         total_pages: Math.ceil(total / limit),
       },
+      filters_applied,
+    };
+  }
+
+  static async getStats(supplierId: string): Promise<SupplierProductStats> {
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .select("status, price, stock_quantity")
+      .eq("supplier_id", supplierId)
+      .eq("is_deleted", false);
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    const rows = (data as Array<{ status: string; price: string; stock_quantity: number }>) ?? [];
+
+    return {
+      total_products: rows.length,
+      active_count: rows.filter((r) => r.status === "active").length,
+      pending_count: rows.filter((r) => r.status === "pending").length,
+      rejected_count: rows.filter((r) => r.status === "rejected").length,
+      out_of_stock_count: rows.filter((r) => r.stock_quantity === 0).length,
+      total_inventory_value: rows.reduce((sum, r) => sum + Number(r.price) * r.stock_quantity, 0),
     };
   }
 

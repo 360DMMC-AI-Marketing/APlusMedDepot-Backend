@@ -47,6 +47,14 @@ export class SupplierProductController {
     res.status(200).json({ message: "Product deleted" });
   }
 
+  static async getStats(req: Request, res: Response): Promise<void> {
+    const supplierId = await SupplierProductService.getSupplierIdFromUserId(req.user!.id);
+
+    const stats = await SupplierProductService.getStats(supplierId);
+
+    res.status(200).json(stats);
+  }
+
   static async uploadImage(req: Request, res: Response): Promise<void> {
     const productId = uuidParamSchema.parse(req.params.id);
     const supplierId = await SupplierProductService.getSupplierIdFromUserId(req.user!.id);

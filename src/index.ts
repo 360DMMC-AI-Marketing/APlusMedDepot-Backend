@@ -16,8 +16,11 @@ import paymentRoutes from "./routes/payments";
 import supplierRoutes from "./routes/suppliers";
 import adminRoutes from "./routes/admin";
 import adminSupplierRoutes from "./routes/adminSuppliers";
+import adminProductRoutes from "./routes/adminProduct.routes";
 import checkoutRoutes from "./routes/checkout.routes";
 import supplierProductRoutes from "./routes/supplierProduct.routes";
+import supplierInventoryRoutes from "./routes/supplierInventory.routes";
+import supplierAnalyticsRoutes from "./routes/supplierAnalytics.routes";
 
 const app = express();
 
@@ -48,9 +51,12 @@ app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/suppliers/analytics", supplierAnalyticsRoutes);
+app.use("/api/suppliers/inventory", supplierInventoryRoutes);
 app.use("/api/suppliers/products", supplierProductRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/suppliers", adminSupplierRoutes);
 app.use("/api/checkout", checkoutRoutes);
 

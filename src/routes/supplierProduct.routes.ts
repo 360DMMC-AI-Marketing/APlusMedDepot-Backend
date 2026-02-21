@@ -1,11 +1,41 @@
 import { Router } from "express";
 
 import { SupplierProductController } from "../controllers/supplierProduct.controller";
+import { SupplierAnalyticsController } from "../controllers/supplierAnalytics.controller";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
 import { uploadSingle } from "../middleware/upload";
 
 const router = Router();
+
+/**
+ * @openapi
+ * /suppliers/products/stats:
+ *   get:
+ *     summary: Get aggregate stats for the supplier's products
+ *     tags: [Supplier Products]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Aggregate product stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_products: { type: integer }
+ *                 active_count: { type: integer }
+ *                 pending_count: { type: integer }
+ *                 rejected_count: { type: integer }
+ *                 out_of_stock_count: { type: integer }
+ *                 total_inventory_value: { type: number }
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - supplier role required
+ */
+router.get("/stats", authenticate, authorize("supplier"), SupplierProductController.getStats);
 
 /**
  * @openapi
@@ -107,6 +137,13 @@ router.post("/", authenticate, authorize("supplier"), SupplierProductController.
  *       409:
  *         description: SKU already exists for this supplier
  */
+router.get(
+  "/:id/analytics",
+  authenticate,
+  authorize("supplier"),
+  SupplierAnalyticsController.getProductAnalytics,
+);
+
 router.put("/:id", authenticate, authorize("supplier"), SupplierProductController.update);
 
 /**

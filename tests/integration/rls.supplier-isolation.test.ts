@@ -292,7 +292,7 @@ beforeAll(async () => {
   }
   productYId = productYData.id;
 
-  // Product Z - belongs to Supplier A, draft
+  // Product Z - belongs to Supplier A, pending (not visible to customers)
   const { data: productZData, error: productZError } = await supabaseAdmin
     .from("products")
     .insert({
@@ -302,7 +302,7 @@ beforeAll(async () => {
       price: 150.0,
       stock_quantity: 20,
       category: "Medical Supplies",
-      status: "draft",
+      status: "pending",
       is_deleted: false,
     })
     .select("id")
@@ -313,7 +313,7 @@ beforeAll(async () => {
   }
   productZId = productZData.id;
 
-  // Product W - belongs to Supplier B, draft (for testing isolation)
+  // Product W - belongs to Supplier B, pending (for testing isolation)
   const { data: productWData, error: productWError } = await supabaseAdmin
     .from("products")
     .insert({
@@ -323,7 +323,7 @@ beforeAll(async () => {
       price: 175.0,
       stock_quantity: 15,
       category: "Surgical Supplies",
-      status: "draft",
+      status: "pending",
       is_deleted: false,
     })
     .select("id")
@@ -447,14 +447,14 @@ describeOrSkip("Supplier Data Isolation", () => {
     // - products_supplier_select_own: suppliers see all their own products
     // So Supplier A should see:
     // - Product X (own, active) ✓
-    // - Product Z (own, draft) ✓
+    // - Product Z (own, pending) ✓
     // - Product Y (Supplier B, active) ✓
-    // - Product W (Supplier B, draft) ✗ - key security check
+    // - Product W (Supplier B, pending) ✗ - key security check
     const productIds = data!.map((p) => p.id);
     expect(productIds).toContain(productXId);
     expect(productIds).toContain(productZId);
     expect(productIds).toContain(productYId); // CAN see - Product Y is active
-    expect(productIds).not.toContain(productWId); // CANNOT see - Product W is draft and owned by B
+    expect(productIds).not.toContain(productWId); // CANNOT see - Product W is pending and owned by B
   });
 
   test("Supplier A cannot update Supplier B product", async () => {
@@ -495,12 +495,12 @@ describeOrSkip("Customer Access", () => {
     expect(error).toBeNull();
     expect(data).toBeDefined();
 
-    // Customer should see Product X and Y (both active), not drafts Z or W
+    // Customer should see Product X and Y (both active), not pending Z or W
     const productIds = data!.map((p) => p.id);
     expect(productIds).toContain(productXId);
     expect(productIds).toContain(productYId);
-    expect(productIds).not.toContain(productZId); // Should NOT see Product Z (draft)
-    expect(productIds).not.toContain(productWId); // Should NOT see Product W (draft)
+    expect(productIds).not.toContain(productZId); // Should NOT see Product Z (pending)
+    expect(productIds).not.toContain(productWId); // Should NOT see Product W (pending)
 
     // All returned products should be active
     data!.forEach((product) => {
@@ -530,17 +530,17 @@ describeOrSkip("Admin Access", () => {
     expect(supplierIds).toContain(supplierBId);
   });
 
-  test("Admin can read all products including drafts", async () => {
+  test("Admin can read all products including non-active statuses", async () => {
     const { data, error } = await clientAdmin.from("products").select("*");
 
     expect(error).toBeNull();
     expect(data).toBeDefined();
 
-    // Admin should see all products including drafts Z and W
+    // Admin should see all products including pending Z and W
     const productIds = data!.map((p) => p.id);
     expect(productIds).toContain(productXId);
     expect(productIds).toContain(productYId);
-    expect(productIds).toContain(productZId); // Admin CAN see draft products
-    expect(productIds).toContain(productWId); // Admin CAN see all suppliers' drafts
+    expect(productIds).toContain(productZId); // Admin CAN see pending products
+    expect(productIds).toContain(productWId); // Admin CAN see all suppliers' pending products
   });
 });

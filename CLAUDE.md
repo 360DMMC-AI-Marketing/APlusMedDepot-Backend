@@ -145,6 +145,66 @@ Never log or expose these. Use `dotenv` for local dev, AWS Secrets Manager for p
 - Never use `SELECT *` — always specify columns explicitly
 - Never hardcode CORS origin to `*` in production — specify allowed origins explicitly
 
+## Sprint 2 (Week 2) — Supplier Product Management & Admin Workflow
+
+### New API Endpoints
+
+**Supplier Product CRUD** (`/api/suppliers/products`):
+- `GET /` — list supplier's own products with filtering (status, search, category, pagination)
+- `GET /stats` — aggregate stats (total, active, pending, rejected, out-of-stock, inventory value)
+- `POST /` — create product (status defaults to `pending`)
+- `PUT /:id` — update product (restricted fields for active products)
+- `DELETE /:id` — soft delete
+- `POST /:id/images` — upload image (max 5 per product, 5MB limit)
+- `DELETE /:id/images/:imageIndex` — delete specific image
+- `GET /:id/analytics` — per-product sales analytics with period filtering
+
+**Supplier Inventory** (`/api/suppliers/inventory`):
+- `GET /` — list inventory with low-stock summary
+- `PUT /:productId` — update stock (uses `SELECT FOR UPDATE` locking)
+- `POST /bulk-update` — bulk stock update (max 50 items, all-or-nothing)
+- `GET /low-stock` — products at/below threshold
+
+**Supplier Analytics** (`/api/suppliers/analytics`):
+- `GET /products` — aggregate analytics: top 5 products by quantity, total revenue, order count, avg order value
+
+**Admin Product Approval** (`/api/admin/products`):
+- `GET /pending` — paginated pending products with supplier names
+- `GET /:id/review` — full product detail + supplier info + review history
+- `PUT /:id/approve` — approve → status = 'active', sends email
+- `PUT /:id/request-changes` — request changes → status = 'needs_revision', sends email with feedback
+- `PUT /:id/reject` — reject → status = 'rejected', sends email with reason
+
+### Key Files
+
+| Domain | Service | Controller | Routes |
+|--------|---------|------------|--------|
+| Supplier Products | `src/services/supplierProduct.service.ts` | `src/controllers/supplierProduct.controller.ts` | `src/routes/supplierProduct.routes.ts` |
+| Product Images | `src/services/storage.service.ts` | (in supplierProduct controller) | (in supplierProduct routes) |
+| Inventory | `src/services/supplierInventory.service.ts` | `src/controllers/supplierInventory.controller.ts` | `src/routes/supplierInventory.routes.ts` |
+| Analytics | `src/services/supplierAnalytics.service.ts` | `src/controllers/supplierAnalytics.controller.ts` | `src/routes/supplierAnalytics.routes.ts` |
+| Admin Approval | `src/services/adminProduct.service.ts` | `src/controllers/adminProduct.controller.ts` | `src/routes/adminProduct.routes.ts` |
+
+### Database Changes (Migrations 014–019)
+- **products table:** Updated status CHECK to `(pending, active, inactive, rejected, needs_revision)`. Added `low_stock_threshold`, `last_restocked_at`, `reviewed_by`, `reviewed_at`, `admin_feedback`.
+- **stock_audit_log table:** Immutable audit trail for all stock changes.
+- **lock_products_for_update():** SQL function for `SELECT ... FOR UPDATE` with deterministic lock ordering.
+- **RLS hardening:** Fixed 4 gaps (014), removed redundant policy (017), added stock_audit_log policies (018).
+
+### Patterns Established
+- **Supplier-scoped queries:** All supplier services resolve `supplier_id` from `req.user.id` via `SupplierProductService.getSupplierIdFromUserId()`, then filter by `supplier_id`. Rejects unapproved suppliers.
+- **Stock locking:** `lock_products_for_update` RPC for concurrent stock updates. Used by both inventory management and checkout.
+- **Admin authorization:** Router-level `authenticate` + `authorize("admin")` middleware.
+- **Email notifications:** `sendEmail()` with `baseLayout()` + `escapeHtml()` for HTML emails via Resend.
+
+### Integration Points for Week 3
+- **`splitOrderBySupplier`** in `src/services/orderSplitting.service.ts` — currently a stub. Must create sub-orders per supplier, calculate commissions using `supplier.commission_rate`, and use `lock_products_for_update` for stock decrement.
+- **Commission calculation** will use `supplier.commission_rate` (percentage stored as NUMERIC(5,2), e.g., 15.00 = 15%).
+- **Checkout flow** in `src/utils/inventory.ts` already uses `lock_products_for_update` for stock decrement.
+
+### Open TODO Stubs (Future Sprints)
+All placeholder TODO routes in `admin.ts`, `orders.ts`, `payments.ts`, `suppliers.ts`, `products.ts` are future work. The real implementations for orders and admin suppliers are in separate route files (`order.routes.ts`, `adminSuppliers.ts`, `adminProduct.routes.ts`).
+
 ## When to Read Additional Docs
 NOTE: These docs are created as each feature is built during sprints. If a doc does not exist yet, it has not been built yet — proceed with the information in this file.
 
@@ -153,3 +213,4 @@ NOTE: These docs are created as each feature is built during sprints. If a doc d
 - For Stripe flow details or payment error handling → read `docs/STRIPE_INTEGRATION.md`
 - For deployment, Docker, or AWS configuration → read `docs/DEPLOYMENT.md`
 - For full project requirements and scope → read `docs/SOW.md`
+- For RLS policy details per table → read `docs/RLS_POLICIES.md`

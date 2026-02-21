@@ -40,6 +40,16 @@ export interface SupplierProductPagination {
 export interface SupplierProductListResponse {
   products: SupplierProduct[];
   pagination: SupplierProductPagination;
+  filters_applied: Record<string, unknown>;
+}
+
+export interface SupplierProductStats {
+  total_products: number;
+  active_count: number;
+  pending_count: number;
+  rejected_count: number;
+  out_of_stock_count: number;
+  total_inventory_value: number;
 }
 
 export interface CreateSupplierProductRequest {
