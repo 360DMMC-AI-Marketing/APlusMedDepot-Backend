@@ -435,6 +435,10 @@ export class SupplierProductService {
     const storagePath = images[imageIndex];
     images.splice(imageIndex, 1);
 
+    // Delete from storage first — if this fails, the DB still has the reference
+    // (safe to retry). The reverse leaves an orphaned file with no DB reference.
+    await StorageService.deleteImage(storagePath);
+
     const { data, error } = await supabaseAdmin
       .from("products")
       .update({ images })
@@ -449,8 +453,6 @@ export class SupplierProductService {
     if (!data) {
       throw new AppError("Failed to update product images", 500, "DATABASE_ERROR");
     }
-
-    await StorageService.deleteImage(storagePath);
 
     const product = toSupplierProduct(data as unknown as ProductRow);
 
