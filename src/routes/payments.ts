@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { PaymentController } from "../controllers/payment.controller";
+import { WebhookController } from "../controllers/webhook.controller";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
 
@@ -134,5 +135,25 @@ router.get(
   authorize("customer"),
   PaymentController.getPaymentStatus,
 );
+
+/**
+ * @openapi
+ * /payments/webhook:
+ *   post:
+ *     summary: Stripe webhook endpoint (called by Stripe, not by clients)
+ *     tags: [Payments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Webhook received
+ *       400:
+ *         description: Invalid signature or missing header
+ */
+router.post("/webhook", WebhookController.handleWebhook);
 
 export default router;
