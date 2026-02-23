@@ -912,3 +912,323 @@ CREATE POLICY cart_items_admin_all ON cart_items
   FOR ALL
   USING (is_admin())
   WITH CHECK (is_admin());
+
+-- ============================================
+-- MIGRATION: 015_extend_orders.sql
+-- ============================================
+-- Adds: payment_intent_id and notes to orders, delivered_at to order_items,
+-- creates enum types, converts orders.status to enum, adds missing indexes.
+
+-- ============================================================
+-- 1. ADD MISSING COLUMNS TO orders
+-- ============================================================
+-- shipping_address already exists (006_create_orders.sql)
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- ============================================================
+-- 2. ADD MISSING COLUMNS TO order_items
+-- ============================================================
+-- tracking_number, carrier, shipped_at already exist (013_align_supplier_schema.sql)
+
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+
+-- ============================================================
+-- 3. CREATE ENUM TYPES (only if they don't exist)
+-- ============================================================
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'order_status') THEN
+    CREATE TYPE order_status AS ENUM (
+      'pending_payment',
+      'payment_processing',
+      'payment_confirmed',
+      'awaiting_fulfillment',
+      'partially_shipped',
+      'fully_shipped',
+      'delivered',
+      'cancelled',
+      'refunded'
+    );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN
+    CREATE TYPE payment_status AS ENUM (
+      'pending',
+      'processing',
+      'succeeded',
+      'failed',
+      'refunded'
+    );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'fulfillment_status') THEN
+    CREATE TYPE fulfillment_status AS ENUM (
+      'pending',
+      'processing',
+      'shipped',
+      'delivered',
+      'cancelled'
+    );
+  END IF;
+END $$;
+
+-- ============================================================
+-- 4. ALTER orders.status TO USE order_status ENUM
+-- ============================================================
+-- orders.status CHECK values match the order_status enum exactly (9 values).
+-- Drop the CHECK constraint first, then convert column type.
+
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+
+-- Must drop the VARCHAR default before converting to enum type,
+-- otherwise PostgreSQL cannot auto-cast the default value.
+ALTER TABLE orders ALTER COLUMN status DROP DEFAULT;
+
+ALTER TABLE orders
+  ALTER COLUMN status TYPE order_status
+  USING status::order_status;
+
+ALTER TABLE orders
+  ALTER COLUMN status SET DEFAULT 'pending_payment'::order_status;
+
+-- NOTE: orders.payment_status is NOT converted to payment_status enum because
+-- the existing CHECK includes 'partially_refunded' which is not in the enum.
+-- Similarly, order_items.fulfillment_status includes 'confirmed' and 'refunded'
+-- not in the fulfillment_status enum. These columns remain VARCHAR with CHECKs
+-- until the enum definitions are reconciled in a future migration.
+
+-- ============================================================
+-- 5. ADD MISSING INDEXES
+-- ============================================================
+-- idx_order_items_supplier_id already exists (011_create_indexes.sql)
+
+CREATE INDEX IF NOT EXISTS idx_order_items_fulfillment_status
+  ON order_items(fulfillment_status);
+
+CREATE INDEX IF NOT EXISTS idx_orders_customer_status
+  ON orders(customer_id, status);
+
+-- Partial unique index on payment_intent_id (only non-NULL values must be unique)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent_id
+  ON orders(payment_intent_id)
+  WHERE payment_intent_id IS NOT NULL;
+
+-- ============================================
+-- MIGRATION: 016_create_order_status_history.sql
+-- ============================================
+-- Tracks all order status transitions for audit trail.
+
+CREATE TABLE order_status_history (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id    UUID        NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  from_status order_status,
+  to_status   order_status NOT NULL,
+  changed_by  UUID        NOT NULL REFERENCES users(id),
+  reason      TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_order_status_history_order_id
+  ON order_status_history(order_id);
+
+-- ============================================================
+-- RLS
+-- ============================================================
+
+ALTER TABLE order_status_history ENABLE ROW LEVEL SECURITY;
+
+-- Customers can view status history for their own orders
+CREATE POLICY order_status_history_customer_select ON order_status_history
+  FOR SELECT
+  USING (
+    order_id IN (SELECT id FROM orders WHERE customer_id = auth.uid()::uuid)
+  );
+
+-- Suppliers can view status history for their sub-orders
+CREATE POLICY order_status_history_supplier_select ON order_status_history
+  FOR SELECT
+  USING (
+    order_id IN (
+      SELECT id FROM orders WHERE supplier_id = get_supplier_id()
+    )
+  );
+
+-- Admins have full access
+CREATE POLICY order_status_history_admin_all ON order_status_history
+  FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+-- ============================================================
+-- MIGRATION: 017_audit_rls_supplier_products.sql
+-- ============================================================
+-- Audit scope: products table RLS policies + schema correctness
+--
+-- GAPS FOUND:
+--   1. Status CHECK constraint on products table uses old enum values
+--      (draft, pending_review, active, inactive, out_of_stock) which
+--      conflict with supplier product service values
+--      (pending, active, inactive, rejected, needs_revision).
+--   2. products_supplier_delete policy is a redundant duplicate of
+--      products_supplier_update (both are UPDATE policies with identical
+--      USING/WITH CHECK predicates). Dropping the redundant copy.
+--
+-- POLICIES CONFIRMED CORRECT — NO CHANGES NEEDED:
+--   products_select_active        : any auth user SELECT WHERE status='active' AND is_deleted=false
+--   products_supplier_select_own  : suppliers SELECT WHERE supplier_id = get_supplier_id()
+--   products_supplier_insert      : suppliers INSERT WHERE supplier_id = get_supplier_id()
+--   products_supplier_update      : suppliers UPDATE WHERE supplier_id = get_supplier_id()
+--   products_admin_all            : admins ALL
+-- ============================================================
+
+-- ----------------------------------------------------------
+-- FIX 1: Update products status CHECK constraint
+-- ----------------------------------------------------------
+-- Old values: draft, pending_review, active, inactive, out_of_stock
+-- New values align with supplier product service workflow:
+--   pending        → newly submitted by supplier, awaiting admin review
+--   active         → approved and listed on marketplace
+--   inactive       → supplier-deactivated (still exists in DB)
+--   rejected       → admin rejected; supplier can revise and resubmit
+--   needs_revision → admin requested changes before approval
+
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check;
+
+ALTER TABLE products
+  ADD CONSTRAINT products_status_check
+  CHECK (status IN ('pending', 'active', 'inactive', 'rejected', 'needs_revision'));
+
+-- Also update the column default to 'pending' (new lifecycle start)
+ALTER TABLE products ALTER COLUMN status SET DEFAULT 'pending';
+
+-- ----------------------------------------------------------
+-- FIX 2: Drop redundant products_supplier_delete policy
+-- ----------------------------------------------------------
+-- products_supplier_delete and products_supplier_update are identical
+-- UPDATE policies. PostgreSQL evaluates all UPDATE policies with OR
+-- logic — the duplicate adds no protection and creates confusion.
+-- products_supplier_update covers soft-delete (UPDATE is_deleted=true)
+-- as well as regular field updates; no separate policy needed.
+
+DROP POLICY IF EXISTS products_supplier_delete ON products;
+
+-- ----------------------------------------------------------
+-- VERIFICATION: Re-declare all active products policies
+-- (idempotent — DROP IF EXISTS before each CREATE)
+-- ----------------------------------------------------------
+
+-- Any authenticated user can see active, non-deleted products
+DROP POLICY IF EXISTS products_select_active ON products;
+CREATE POLICY products_select_active ON products
+  FOR SELECT
+  USING (status = 'active' AND is_deleted = false);
+
+-- Suppliers can see ALL their own products (any status, including pending/rejected/needs_revision)
+DROP POLICY IF EXISTS products_supplier_select_own ON products;
+CREATE POLICY products_supplier_select_own ON products
+  FOR SELECT
+  USING (supplier_id = get_supplier_id());
+
+-- Suppliers can insert products only for their own supplier_id
+DROP POLICY IF EXISTS products_supplier_insert ON products;
+CREATE POLICY products_supplier_insert ON products
+  FOR INSERT
+  WITH CHECK (supplier_id = get_supplier_id());
+
+-- Suppliers can update their own products (covers both field updates and soft-delete)
+DROP POLICY IF EXISTS products_supplier_update ON products;
+CREATE POLICY products_supplier_update ON products
+  FOR UPDATE
+  USING (supplier_id = get_supplier_id())
+  WITH CHECK (supplier_id = get_supplier_id());
+
+-- Admins have unrestricted access to all products
+DROP POLICY IF EXISTS products_admin_all ON products;
+CREATE POLICY products_admin_all ON products
+  FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+-- ============================================================
+-- MIGRATION: 018_supplier_inventory.sql
+-- ============================================================
+-- Adds columns, tables, and functions required by the supplier
+-- inventory management API (Task 2.5).
+-- ============================================================
+
+-- ----------------------------------------------------------
+-- 1. Add low_stock_threshold and last_restocked_at to products
+-- ----------------------------------------------------------
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS low_stock_threshold INTEGER NOT NULL DEFAULT 10;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS last_restocked_at TIMESTAMPTZ;
+
+-- ----------------------------------------------------------
+-- 2. Create stock_audit_log table
+-- ----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS stock_audit_log (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id      UUID        NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  supplier_id     UUID        NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+  old_quantity     INTEGER     NOT NULL,
+  new_quantity     INTEGER     NOT NULL,
+  change_source   VARCHAR(50) NOT NULL DEFAULT 'supplier_update'
+                  CHECK (change_source IN ('supplier_update', 'bulk_update', 'order_decrement', 'order_refund')),
+  changed_by      UUID        REFERENCES users(id),
+  changed_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_audit_product_id ON stock_audit_log(product_id);
+CREATE INDEX IF NOT EXISTS idx_stock_audit_supplier_id ON stock_audit_log(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_stock_audit_changed_at ON stock_audit_log(changed_at DESC);
+
+-- RLS on stock_audit_log
+ALTER TABLE stock_audit_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY stock_audit_supplier_select ON stock_audit_log
+  FOR SELECT
+  USING (supplier_id = get_supplier_id());
+
+CREATE POLICY stock_audit_admin_all ON stock_audit_log
+  FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+-- ----------------------------------------------------------
+-- 3. Create lock_products_for_update RPC function
+-- ----------------------------------------------------------
+-- Used by inventory.ts for SELECT ... FOR UPDATE row locking.
+-- Returns id and stock_quantity for the given product IDs.
+-- MUST be called within a transaction context to hold locks.
+
+CREATE OR REPLACE FUNCTION lock_products_for_update(product_ids UUID[])
+RETURNS TABLE(id UUID, stock_quantity INTEGER) AS $$
+  SELECT p.id, p.stock_quantity
+  FROM products p
+  WHERE p.id = ANY(product_ids)
+  ORDER BY p.id   -- deterministic lock order prevents deadlocks
+  FOR UPDATE;
+$$ LANGUAGE sql;
+
+-- ============================================================
+-- MIGRATION: 019_product_approval_workflow.sql
+-- ============================================================
+-- Adds admin review metadata columns to products table for the
+-- approval workflow (Task 2.6).
+-- ============================================================
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES users(id);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS admin_feedback TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_products_status_created ON products(status, created_at ASC);

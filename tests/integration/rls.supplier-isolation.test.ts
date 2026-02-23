@@ -56,7 +56,12 @@ let clientAdmin: SupabaseClient;
 // Test user credentials
 const testPassword = "TestPassword123!";
 
-beforeAll(async () => {
+// Skip setup/teardown entirely when using placeholder — the tests are skipped anyway
+// and the Supabase API calls in beforeAll will time out against a fake URL.
+const beforeAllOrSkip = isTestPlaceholder ? (_fn: () => Promise<void>) => {} : beforeAll;
+const afterAllOrSkip = isTestPlaceholder ? (_fn: () => Promise<void>) => {} : afterAll;
+
+beforeAllOrSkip(async () => {
   // ============================================
   // Clean up leftover data from previous test runs
   // ============================================
@@ -395,7 +400,7 @@ beforeAll(async () => {
   });
 });
 
-afterAll(async () => {
+afterAllOrSkip(async () => {
   // ============================================
   // Clean up test data in reverse order
   // ============================================
