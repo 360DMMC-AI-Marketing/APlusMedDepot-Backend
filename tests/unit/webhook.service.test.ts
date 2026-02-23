@@ -19,6 +19,7 @@ jest.mock("../../src/config/stripe", () => ({
 jest.mock("../../src/config/env", () => ({
   getEnv: () => ({
     STRIPE_WEBHOOK_SECRET: "whsec_test_secret",
+    STRIPE_WEBHOOK_TOLERANCE: 300,
   }),
 }));
 
@@ -32,6 +33,12 @@ jest.mock("../../src/services/hooks/paymentHooks", () => ({
 
 jest.mock("../../src/services/email.service", () => ({
   sendOrderConfirmation: jest.fn(),
+}));
+
+jest.mock("../../src/utils/securityLogger", () => ({
+  logSuspiciousActivity: jest.fn(),
+  logWebhookVerificationFailure: jest.fn(),
+  logWebhookProcessed: jest.fn(),
 }));
 
 import { WebhookService } from "../../src/services/webhook.service";
@@ -114,6 +121,7 @@ function mockInsertQuery() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  WebhookService.clearProcessedEvents();
 });
 
 describe("WebhookService", () => {
@@ -129,6 +137,7 @@ describe("WebhookService", () => {
         Buffer.from("raw-body"),
         "sig_test",
         "whsec_test_secret",
+        300,
       );
     });
 
@@ -417,6 +426,99 @@ describe("WebhookService", () => {
 
       expect(mockFrom).toHaveBeenCalledTimes(1);
       expect(mockOnPaymentRefunded).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("isDuplicate / event deduplication", () => {
+    it("does not process the same event ID twice via handlePaymentSuccess", async () => {
+      const pi = makePaymentIntent();
+      const event = makeEvent("payment_intent.succeeded", pi);
+
+      const selectChain = mockSelectQuery({ data: makeOrder() });
+      const updateChain = mockUpdateQuery();
+      const insertChain = mockInsertQuery();
+      const userSelectChain = mockSelectQuery({ data: { email: "cust@test.com" } });
+
+      let callCount = 0;
+      mockFrom.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return selectChain;
+        if (callCount === 2) return updateChain;
+        if (callCount === 3) return insertChain;
+        return userSelectChain;
+      });
+
+      await WebhookService.handlePaymentSuccess(event);
+      expect(mockFrom).toHaveBeenCalled();
+
+      mockFrom.mockClear();
+
+      // Second call with same event ID should be skipped
+      await WebhookService.handlePaymentSuccess(event);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("does not process the same event ID twice via handlePaymentFailure", async () => {
+      const pi = makePaymentIntent();
+      const event = makeEvent("payment_intent.payment_failed", pi);
+
+      const updateChain = mockUpdateQuery();
+      const insertChain = mockInsertQuery();
+
+      let callCount = 0;
+      mockFrom.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return updateChain;
+        return insertChain;
+      });
+
+      await WebhookService.handlePaymentFailure(event);
+      expect(mockFrom).toHaveBeenCalled();
+
+      mockFrom.mockClear();
+
+      await WebhookService.handlePaymentFailure(event);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("does not process the same event ID twice via handleRefund", async () => {
+      const charge = { payment_intent: PI_ID, amount: 6493, amount_refunded: 6493 };
+      const event = makeEvent("charge.refunded", charge);
+
+      const selectChain = mockSelectQuery({
+        data: { id: ORDER_ID, payment_status: "paid" },
+      });
+      const updateChain = mockUpdateQuery();
+
+      let callCount = 0;
+      mockFrom.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return selectChain;
+        return updateChain;
+      });
+
+      await WebhookService.handleRefund(event);
+      expect(mockFrom).toHaveBeenCalled();
+
+      mockFrom.mockClear();
+
+      await WebhookService.handleRefund(event);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("evicts oldest event when Set exceeds max size", () => {
+      // Fill up to max
+      for (let i = 0; i < 10_000; i++) {
+        WebhookService.isDuplicate(`evt_${i}`);
+      }
+      expect(WebhookService.getProcessedEventsSize()).toBe(10_000);
+
+      // Adding one more should evict the oldest
+      WebhookService.isDuplicate("evt_new");
+      expect(WebhookService.getProcessedEventsSize()).toBe(10_000);
+
+      // The oldest (evt_0) should have been evicted
+      expect(WebhookService.isDuplicate("evt_0")).toBe(false);
     });
   });
 });
