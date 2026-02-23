@@ -64,7 +64,7 @@ export class CheckoutService {
     const { data: products, error: productsError } = await supabaseAdmin
       .from("products")
       .select(
-        "id, name, price, stock_quantity, status, is_deleted, supplier_id, suppliers(company_name)",
+        "id, name, price, stock_quantity, status, is_deleted, supplier_id, suppliers(business_name)",
       )
       .in("id", productIds);
 
@@ -82,7 +82,7 @@ export class CheckoutService {
         status: string;
         is_deleted: boolean;
         supplier_id: string;
-        suppliers: { company_name: string };
+        suppliers: { business_name: string };
       }
     >();
 
@@ -94,7 +94,7 @@ export class CheckoutService {
       status: string;
       is_deleted: boolean;
       supplier_id: string;
-      suppliers: { company_name: string };
+      suppliers: { business_name: string };
     }[]) {
       productMap.set(p.id, p);
     }
@@ -133,7 +133,7 @@ export class CheckoutService {
         product_id: product.id,
         product_name: product.name,
         supplier_id: product.supplier_id,
-        supplier_name: product.suppliers.company_name,
+        supplier_name: product.suppliers.business_name,
         quantity: item.quantity,
         current_price: currentPrice,
         subtotal,

@@ -1,5 +1,4 @@
 import { decode } from "jsonwebtoken";
-import type { User } from "@supabase/supabase-js";
 
 import { supabaseAdmin } from "../config/supabase";
 import type { AuthSession, AuthUser } from "../types/auth.types";
@@ -57,18 +56,6 @@ const toAuthSession = (session: {
   refreshToken: session.refresh_token,
   expiresAt: session.expires_at ?? 0,
 });
-
-const getPasswordHash = (user: User): string => {
-  const candidate = (user as unknown as { password_hash?: unknown }).password_hash;
-  if (typeof candidate === "string" && candidate.length > 0) {
-    return candidate;
-  }
-  throw new AuthServiceError(
-    "PASSWORD_HASH_MISSING",
-    "Password hash missing from auth provider",
-    500,
-  );
-};
 
 const getJwtExpiry = (token: string): number => {
   const decoded = decode(token, { json: true });
@@ -143,14 +130,12 @@ export class AuthService {
       }
 
       const authUser = createData.user;
-      const passwordHash = getPasswordHash(authUser);
 
       const { data: userRow, error: userError } = await supabaseAdmin
         .from("users")
         .insert({
           id: authUser.id,
           email,
-          password_hash: passwordHash,
           first_name: firstName,
           last_name: lastName,
           company_name: companyName,
