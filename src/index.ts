@@ -27,6 +27,8 @@ const app = express();
 // Global middleware
 app.use(helmet());
 app.use(cors());
+// Raw body for Stripe webhook signature verification (must precede express.json)
+app.use("/api/payments/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 app.use(apiLimiter);
 
