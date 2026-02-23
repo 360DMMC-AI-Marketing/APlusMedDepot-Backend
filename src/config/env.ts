@@ -19,6 +19,7 @@ const envSchema = z.object({
   FROM_EMAIL: z.string().default(""),
   JWT_SECRET: z.string().min(32),
   DATABASE_URL: z.string().min(1),
+  STRIPE_WEBHOOK_TOLERANCE: z.coerce.number().default(300),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
 });
