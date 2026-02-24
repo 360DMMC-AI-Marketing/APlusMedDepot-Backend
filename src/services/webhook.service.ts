@@ -5,6 +5,7 @@ import { getEnv } from "../config/env";
 import { supabaseAdmin } from "../config/supabase";
 import { onPaymentSuccess, onPaymentRefunded } from "./hooks/paymentHooks";
 import { OrderConfirmationService } from "./orderConfirmation.service";
+import { PaymentAuditService } from "./paymentAudit.service";
 import { logSuspiciousActivity } from "../utils/securityLogger";
 
 const MAX_PROCESSED_EVENTS = 10_000;
@@ -81,15 +82,15 @@ export class WebhookService {
       .update({ payment_status: "paid", status: "confirmed" })
       .eq("id", orderId);
 
-    await supabaseAdmin.from("payments").insert({
-      order_id: orderId,
-      stripe_payment_intent_id: paymentIntent.id,
+    await PaymentAuditService.logPaymentEvent({
+      orderId,
+      stripePaymentIntentId: paymentIntent.id,
       amount: paymentIntent.amount / 100,
       currency: paymentIntent.currency,
       status: "succeeded",
-      payment_method: paymentIntent.payment_method_types?.[0] ?? "card",
-      paid_at: new Date().toISOString(),
-      stripe_event_id: event.id,
+      paymentMethod: paymentIntent.payment_method_types?.[0] ?? "card",
+      stripeEventId: event.id,
+      paidAt: new Date().toISOString(),
     });
 
     await onPaymentSuccess(orderId);
@@ -126,14 +127,14 @@ export class WebhookService {
 
     const failureReason = paymentIntent.last_payment_error?.message ?? "Unknown payment failure";
 
-    await supabaseAdmin.from("payments").insert({
-      order_id: orderId,
-      stripe_payment_intent_id: paymentIntent.id,
+    await PaymentAuditService.logPaymentEvent({
+      orderId,
+      stripePaymentIntentId: paymentIntent.id,
       amount: paymentIntent.amount / 100,
       currency: paymentIntent.currency,
       status: "failed",
-      failure_reason: failureReason,
-      stripe_event_id: event.id,
+      failureReason,
+      stripeEventId: event.id,
     });
   }
 
