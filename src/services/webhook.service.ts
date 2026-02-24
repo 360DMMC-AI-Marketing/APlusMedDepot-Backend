@@ -13,9 +13,10 @@ const processedEvents = new Set<string>();
 
 export class WebhookService {
   static isDuplicate(eventId: string): boolean {
-    if (processedEvents.has(eventId)) {
-      return true;
-    }
+    return processedEvents.has(eventId);
+  }
+
+  static markProcessed(eventId: string): void {
     if (processedEvents.size >= MAX_PROCESSED_EVENTS) {
       const oldest = processedEvents.values().next().value;
       if (oldest !== undefined) {
@@ -23,7 +24,6 @@ export class WebhookService {
       }
     }
     processedEvents.add(eventId);
-    return false;
   }
 
   static clearProcessedEvents(): void {
@@ -79,7 +79,7 @@ export class WebhookService {
 
     await supabaseAdmin
       .from("orders")
-      .update({ payment_status: "paid", status: "confirmed" })
+      .update({ payment_status: "paid", status: "payment_confirmed" })
       .eq("id", orderId);
 
     await PaymentAuditService.logPaymentEvent({
@@ -100,6 +100,8 @@ export class WebhookService {
     } catch (err) {
       console.error("[WEBHOOK] Failed to run order confirmation:", err);
     }
+
+    WebhookService.markProcessed(event.id);
   }
 
   static async handlePaymentFailure(event: Stripe.Event): Promise<void> {
@@ -136,6 +138,8 @@ export class WebhookService {
       failureReason,
       stripeEventId: event.id,
     });
+
+    WebhookService.markProcessed(event.id);
   }
 
   static async handleRefund(event: Stripe.Event): Promise<void> {
@@ -182,5 +186,7 @@ export class WebhookService {
         .update({ payment_status: "partially_refunded" })
         .eq("id", order.id);
     }
+
+    WebhookService.markProcessed(event.id);
   }
 }

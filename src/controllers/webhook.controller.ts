@@ -24,18 +24,22 @@ export class WebhookController {
       return;
     }
 
-    switch (event.type) {
-      case "payment_intent.succeeded":
-        await WebhookService.handlePaymentSuccess(event);
-        break;
-      case "payment_intent.payment_failed":
-        await WebhookService.handlePaymentFailure(event);
-        break;
-      case "charge.refunded":
-        await WebhookService.handleRefund(event);
-        break;
-      default:
-        break;
+    try {
+      switch (event.type) {
+        case "payment_intent.succeeded":
+          await WebhookService.handlePaymentSuccess(event);
+          break;
+        case "payment_intent.payment_failed":
+          await WebhookService.handlePaymentFailure(event);
+          break;
+        case "charge.refunded":
+          await WebhookService.handleRefund(event);
+          break;
+        default:
+          break;
+      }
+    } catch (err) {
+      console.error(`[WEBHOOK] Handler error for ${event.type}:`, err);
     }
 
     logWebhookProcessed(event.id, event.type);

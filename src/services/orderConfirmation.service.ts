@@ -157,7 +157,7 @@ export class OrderConfirmationService {
     await supabaseAdmin.from("order_status_history").insert({
       order_id: orderId,
       from_status: "pending_payment",
-      to_status: "confirmed",
+      to_status: "payment_confirmed",
       changed_by: order.customer_id,
       reason: "Payment confirmed via Stripe webhook",
     });

@@ -359,7 +359,7 @@ describe("PaymentService", () => {
       expect(result.paidAt).toBeTruthy();
       expect(updateChain.update).toHaveBeenCalledWith({
         payment_status: "paid",
-        status: "confirmed",
+        status: "payment_confirmed",
       });
     });
 
@@ -464,7 +464,7 @@ describe("PaymentService", () => {
           id: ORDER_ID,
           customer_id: CUSTOMER_ID,
           payment_status: "paid",
-          status: "confirmed",
+          status: "payment_confirmed",
         },
       });
       mockFrom.mockReturnValue(selectChain);
@@ -473,7 +473,7 @@ describe("PaymentService", () => {
 
       expect(result).toEqual({
         paymentStatus: "paid",
-        orderStatus: "confirmed",
+        orderStatus: "payment_confirmed",
       });
     });
 
@@ -516,7 +516,7 @@ describe("PaymentService", () => {
       return {
         id: ORDER_ID,
         customer_id: CUSTOMER_ID,
-        status: "confirmed",
+        status: "payment_confirmed",
         payment_status: "paid",
         payment_intent_id: PI_ID,
         total_amount: "64.93",
@@ -713,7 +713,7 @@ describe("PaymentService", () => {
       expect(mockFrom).toHaveBeenNthCalledWith(5, "order_status_history");
       expect(historyInsertChain.insert).toHaveBeenCalledWith({
         order_id: ORDER_ID,
-        from_status: "confirmed",
+        from_status: "payment_confirmed",
         to_status: "cancelled",
         changed_by: CUSTOMER_ID,
         reason: "Changed my mind",

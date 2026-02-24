@@ -1073,7 +1073,7 @@ describe("OrderService.getOrderById", () => {
       }),
       makeHistoryRow({
         id: "hist-2",
-        to_status: "confirmed",
+        to_status: "payment_confirmed",
         created_at: "2026-02-16T01:00:00Z",
       }),
       makeHistoryRow({
