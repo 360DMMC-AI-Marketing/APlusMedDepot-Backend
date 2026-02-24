@@ -8,6 +8,7 @@ jest.mock("../../src/config/supabase", () => ({
 
 const mockPaymentIntentsCreate = jest.fn();
 const mockPaymentIntentsRetrieve = jest.fn();
+const mockPaymentIntentsCancel = jest.fn();
 const mockRefundsCreate = jest.fn();
 
 jest.mock("../../src/config/stripe", () => ({
@@ -15,6 +16,7 @@ jest.mock("../../src/config/stripe", () => ({
     paymentIntents: {
       create: mockPaymentIntentsCreate,
       retrieve: mockPaymentIntentsRetrieve,
+      cancel: mockPaymentIntentsCancel,
     },
     refunds: {
       create: mockRefundsCreate,
@@ -717,6 +719,245 @@ describe("PaymentService", () => {
         changed_by: CUSTOMER_ID,
         reason: "Changed my mind",
       });
+    });
+  });
+
+  describe("retryPayment", () => {
+    const OLD_PI = "pi_old_123";
+    const NEW_PI = "pi_new_456";
+
+    function makeRetryOrder(overrides: Record<string, unknown> = {}) {
+      return {
+        id: ORDER_ID,
+        customer_id: CUSTOMER_ID,
+        status: "pending_payment",
+        payment_intent_id: OLD_PI,
+        total_amount: "64.93",
+        order_number: ORDER_NUMBER,
+        payment_status: "failed",
+        ...overrides,
+      };
+    }
+
+    function mockSelectListQuery(result: { data?: unknown; error?: unknown }) {
+      const resolved = {
+        data: result.data ?? null,
+        error: result.error ?? null,
+      };
+      const chain: Record<string, jest.Mock> = {};
+      const self = () => chain;
+      chain.select = jest.fn(self);
+      chain.eq = jest.fn(self);
+      chain.order = jest.fn(self);
+      chain.then = jest
+        .fn()
+        .mockImplementation((resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+          Promise.resolve(resolved).then(resolve, reject),
+        );
+      return chain;
+    }
+
+    function mockInsertQuery() {
+      const chain: Record<string, jest.Mock> = {};
+      chain.insert = jest.fn().mockResolvedValue({ data: null, error: null });
+      return chain;
+    }
+
+    function setupRetryHappyPath(orderOverrides: Record<string, unknown> = {}) {
+      const orderSelectChain = mockSelectQuery({ data: makeRetryOrder(orderOverrides) });
+      const attemptsSelectChain = mockSelectListQuery({ data: [{ id: "att-1" }] });
+      const orderUpdateChain = mockUpdateQuery();
+      const paymentInsertChain = mockInsertQuery();
+
+      let callCount = 0;
+      mockFrom.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return orderSelectChain; // orders select
+        if (callCount === 2) return attemptsSelectChain; // payments select (count)
+        if (callCount === 3) return orderUpdateChain; // orders update
+        return paymentInsertChain; // payments insert
+      });
+
+      mockPaymentIntentsCancel.mockResolvedValue({ id: OLD_PI, status: "canceled" });
+      mockPaymentIntentsCreate.mockResolvedValue({
+        id: NEW_PI,
+        client_secret: "pi_new_456_secret",
+      });
+
+      return { orderSelectChain, attemptsSelectChain, orderUpdateChain, paymentInsertChain };
+    }
+
+    it("creates new PaymentIntent and cancels old one", async () => {
+      setupRetryHappyPath();
+
+      const result = await PaymentService.retryPayment(ORDER_ID, CUSTOMER_ID);
+
+      expect(result).toEqual({
+        clientSecret: "pi_new_456_secret",
+        paymentIntentId: NEW_PI,
+      });
+
+      expect(mockPaymentIntentsCancel).toHaveBeenCalledWith(OLD_PI);
+      expect(mockPaymentIntentsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 6493,
+          currency: "usd",
+          metadata: expect.objectContaining({ order_id: ORDER_ID }),
+        }),
+      );
+    });
+
+    it("throws CONFLICT when order already paid", async () => {
+      const selectChain = mockSelectQuery({
+        data: makeRetryOrder({ payment_status: "paid" }),
+      });
+      mockFrom.mockReturnValue(selectChain);
+
+      await expect(PaymentService.retryPayment(ORDER_ID, CUSTOMER_ID)).rejects.toMatchObject({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "Order already paid",
+      });
+    });
+
+    it("throws CONFLICT when max attempts (3) exceeded", async () => {
+      const orderSelectChain = mockSelectQuery({ data: makeRetryOrder() });
+      const attemptsSelectChain = mockSelectListQuery({
+        data: [{ id: "att-1" }, { id: "att-2" }, { id: "att-3" }],
+      });
+
+      let callCount = 0;
+      mockFrom.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return orderSelectChain;
+        return attemptsSelectChain;
+      });
+
+      await expect(PaymentService.retryPayment(ORDER_ID, CUSTOMER_ID)).rejects.toMatchObject({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "Maximum payment attempts exceeded. Contact support.",
+      });
+    });
+
+    it("still proceeds when old PaymentIntent cancel fails", async () => {
+      setupRetryHappyPath();
+      mockPaymentIntentsCancel.mockRejectedValue(new Error("already canceled"));
+
+      const result = await PaymentService.retryPayment(ORDER_ID, CUSTOMER_ID);
+
+      expect(result.paymentIntentId).toBe(NEW_PI);
+      expect(mockPaymentIntentsCreate).toHaveBeenCalled();
+    });
+
+    it("updates order with new payment_intent_id", async () => {
+      const { orderUpdateChain } = setupRetryHappyPath();
+
+      await PaymentService.retryPayment(ORDER_ID, CUSTOMER_ID);
+
+      expect(mockFrom).toHaveBeenNthCalledWith(3, "orders");
+      expect(orderUpdateChain.update).toHaveBeenCalledWith({
+        payment_intent_id: NEW_PI,
+        payment_status: "processing",
+      });
+    });
+
+    it("inserts payment attempt record", async () => {
+      const { paymentInsertChain } = setupRetryHappyPath();
+
+      await PaymentService.retryPayment(ORDER_ID, CUSTOMER_ID);
+
+      expect(mockFrom).toHaveBeenNthCalledWith(4, "payments");
+      expect(paymentInsertChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          order_id: ORDER_ID,
+          stripe_payment_intent_id: NEW_PI,
+          amount: 64.93,
+          currency: "usd",
+          status: "initiated",
+        }),
+      );
+    });
+  });
+
+  describe("getPaymentAttempts", () => {
+    function mockSelectListQuery(result: { data?: unknown; error?: unknown }) {
+      const resolved = {
+        data: result.data ?? null,
+        error: result.error ?? null,
+      };
+      const chain: Record<string, jest.Mock> = {};
+      const self = () => chain;
+      chain.select = jest.fn(self);
+      chain.eq = jest.fn(self);
+      chain.order = jest.fn(self);
+      chain.then = jest
+        .fn()
+        .mockImplementation((resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+          Promise.resolve(resolved).then(resolve, reject),
+        );
+      return chain;
+    }
+
+    it("returns all attempts chronologically", async () => {
+      const orderSelectChain = mockSelectQuery({
+        data: { id: ORDER_ID, customer_id: CUSTOMER_ID },
+      });
+      const paymentsSelectChain = mockSelectListQuery({
+        data: [
+          {
+            id: "pay-1",
+            status: "failed",
+            amount: "64.93",
+            created_at: "2026-02-22T01:00:00Z",
+            failure_reason: "card_declined",
+          },
+          {
+            id: "pay-2",
+            status: "succeeded",
+            amount: "64.93",
+            created_at: "2026-02-22T02:00:00Z",
+            failure_reason: null,
+          },
+        ],
+      });
+
+      let callCount = 0;
+      mockFrom.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return orderSelectChain;
+        return paymentsSelectChain;
+      });
+
+      const result = await PaymentService.getPaymentAttempts(ORDER_ID, CUSTOMER_ID);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        id: "pay-1",
+        status: "failed",
+        amount: 64.93,
+        createdAt: "2026-02-22T01:00:00Z",
+        failureReason: "card_declined",
+      });
+      expect(result[1].failureReason).toBeNull();
+    });
+
+    it("returns empty array for order with no payment records", async () => {
+      const orderSelectChain = mockSelectQuery({
+        data: { id: ORDER_ID, customer_id: CUSTOMER_ID },
+      });
+      const paymentsSelectChain = mockSelectListQuery({ data: [] });
+
+      let callCount = 0;
+      mockFrom.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return orderSelectChain;
+        return paymentsSelectChain;
+      });
+
+      const result = await PaymentService.getPaymentAttempts(ORDER_ID, CUSTOMER_ID);
+
+      expect(result).toEqual([]);
     });
   });
 });
