@@ -77,3 +77,23 @@ export interface Order {
 export interface CreateOrderResult {
   order: Order;
 }
+
+export interface SubOrder {
+  id: string;
+  orderNumber: string;
+  masterOrderId: string;
+  supplierId: string;
+  supplierName: string;
+  totalAmount: number;
+  taxAmount: number;
+  subtotal: number;
+  status: string;
+  items: Array<{
+    id: string;
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  }>;
+  createdAt: string;
+}
