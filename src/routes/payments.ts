@@ -138,6 +138,98 @@ router.get(
 
 /**
  * @openapi
+ * /payments/retry:
+ *   post:
+ *     summary: Retry a failed or pending payment with a new PaymentIntent
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderId]
+ *             properties:
+ *               orderId:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       201:
+ *         description: New PaymentIntent created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 clientSecret:
+ *                   type: string
+ *                 paymentIntentId:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — not the order owner
+ *       404:
+ *         description: Order not found
+ *       409:
+ *         description: Order not eligible for retry or max attempts exceeded
+ */
+router.post("/retry", authenticate, authorize("customer"), PaymentController.retryPayment);
+
+/**
+ * @openapi
+ * /payments/{orderId}/attempts:
+ *   get:
+ *     summary: Get all payment attempts for an order
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: List of payment attempts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                   amount:
+ *                     type: number
+ *                   createdAt:
+ *                     type: string
+ *                   failureReason:
+ *                     type: string
+ *                     nullable: true
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — not the order owner
+ *       404:
+ *         description: Order not found
+ */
+router.get(
+  "/:orderId/attempts",
+  authenticate,
+  authorize("customer"),
+  PaymentController.getPaymentAttempts,
+);
+
+/**
+ * @openapi
  * /payments/refund:
  *   post:
  *     summary: Request a refund and cancel an order

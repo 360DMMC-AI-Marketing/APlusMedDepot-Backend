@@ -46,4 +46,20 @@ export class PaymentController {
     );
     res.status(200).json(result);
   }
+
+  static async retryPayment(req: Request, res: Response): Promise<void> {
+    const retrySchema = z.object({
+      orderId: z.string().uuid(),
+    });
+
+    const { orderId } = retrySchema.parse(req.body);
+    const result = await PaymentService.retryPayment(orderId, req.user!.id);
+    res.status(201).json(result);
+  }
+
+  static async getPaymentAttempts(req: Request, res: Response): Promise<void> {
+    const orderId = orderIdParamSchema.parse(req.params.orderId);
+    const result = await PaymentService.getPaymentAttempts(orderId, req.user!.id);
+    res.status(200).json(result);
+  }
 }

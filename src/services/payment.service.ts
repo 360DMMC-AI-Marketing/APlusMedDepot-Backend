@@ -11,6 +11,7 @@ import type {
   PaymentIntentResult,
   PaymentConfirmationResult,
   RefundResult,
+  PaymentAttempt,
 } from "../types/payment.types";
 import type Stripe from "stripe";
 
@@ -279,5 +280,127 @@ export class PaymentService {
       status: "refunded",
       amount,
     };
+  }
+
+  static async retryPayment(orderId: string, customerId: string): Promise<PaymentIntentResult> {
+    // 1. Fetch order and verify ownership
+    const { data: order, error } = await supabaseAdmin
+      .from("orders")
+      .select(
+        "id, customer_id, status, payment_intent_id, total_amount, order_number, payment_status",
+      )
+      .eq("id", orderId)
+      .single();
+
+    if (error || !order) {
+      throw notFound("Order");
+    }
+
+    if (order.customer_id !== customerId) {
+      throw forbidden();
+    }
+
+    // 2. Check payment status eligibility
+    if (order.payment_status === "paid") {
+      throw conflict("Order already paid");
+    }
+    if (order.payment_status === "refunded") {
+      throw conflict("Order has been refunded");
+    }
+    if (order.payment_status !== "pending" && order.payment_status !== "failed") {
+      throw conflict("Order is not eligible for payment retry");
+    }
+
+    // 3. Check attempt count
+    const { data: attempts } = await supabaseAdmin
+      .from("payments")
+      .select("id")
+      .eq("order_id", orderId);
+
+    const attemptCount = (attempts ?? []).length;
+    if (attemptCount >= 3) {
+      throw conflict("Maximum payment attempts exceeded. Contact support.");
+    }
+
+    // 4. Cancel old PaymentIntent if exists
+    const stripe = getStripe();
+    if (order.payment_intent_id) {
+      try {
+        await stripe.paymentIntents.cancel(order.payment_intent_id);
+      } catch {
+        // Already canceled or can't cancel — proceed anyway
+      }
+    }
+
+    // 5. Create new PaymentIntent
+    const amountInCents = Math.round(Number(order.total_amount) * 100);
+    const pi = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: "usd",
+      metadata: {
+        order_id: orderId,
+        order_number: order.order_number,
+        customer_id: customerId,
+      },
+      automatic_payment_methods: { enabled: true },
+    });
+
+    // 6. Update order with new payment_intent_id
+    await supabaseAdmin
+      .from("orders")
+      .update({ payment_intent_id: pi.id, payment_status: "processing" })
+      .eq("id", orderId);
+
+    // 7. Insert payment attempt record
+    await supabaseAdmin.from("payments").insert({
+      order_id: orderId,
+      stripe_payment_intent_id: pi.id,
+      amount: Number(order.total_amount),
+      currency: "usd",
+      status: "initiated",
+    });
+
+    return { clientSecret: pi.client_secret!, paymentIntentId: pi.id };
+  }
+
+  static async getPaymentAttempts(orderId: string, customerId: string): Promise<PaymentAttempt[]> {
+    // 1. Fetch order and verify ownership
+    const { data: order, error } = await supabaseAdmin
+      .from("orders")
+      .select("id, customer_id")
+      .eq("id", orderId)
+      .single();
+
+    if (error || !order) {
+      throw notFound("Order");
+    }
+
+    if (order.customer_id !== customerId) {
+      throw forbidden();
+    }
+
+    // 2. Fetch payment attempts
+    const { data: payments } = await supabaseAdmin
+      .from("payments")
+      .select("id, status, amount, created_at, failure_reason")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: true });
+
+    type PaymentRow = {
+      id: string;
+      status: string;
+      amount: string | number;
+      created_at: string;
+      failure_reason: string | null;
+    };
+    const rows = (payments ?? []) as unknown as PaymentRow[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      amount: Number(row.amount),
+      createdAt: row.created_at,
+      failureReason: row.failure_reason,
+    }));
   }
 }
