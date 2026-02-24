@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { z } from "zod";
 
 import { OrderService } from "../services/order.service";
+import { OrderConfirmationService } from "../services/orderConfirmation.service";
 import { ORDER_STATUSES } from "../utils/orderStateMachine";
 
 const createOrderSchema = z.object({
@@ -71,5 +72,13 @@ export class OrderController {
       req.user!.role,
     );
     res.status(200).json({ order });
+  }
+
+  static async getConfirmation(req: Request, res: Response): Promise<void> {
+    const result = await OrderConfirmationService.getOrderConfirmation(
+      req.params.id as string,
+      req.user!.id,
+    );
+    res.status(200).json(result);
   }
 }

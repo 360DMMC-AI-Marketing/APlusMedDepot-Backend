@@ -138,6 +138,55 @@ router.get(
 
 /**
  * @openapi
+ * /payments/refund:
+ *   post:
+ *     summary: Request a refund and cancel an order
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderId]
+ *             properties:
+ *               orderId:
+ *                 type: string
+ *                 format: uuid
+ *               reason:
+ *                 type: string
+ *                 maxLength: 500
+ *     responses:
+ *       200:
+ *         description: Refund processed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 refundId:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                 amount:
+ *                   type: number
+ *       400:
+ *         description: Validation error or no payment intent
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — not the order owner
+ *       404:
+ *         description: Order not found
+ *       409:
+ *         description: Order not eligible for refund
+ */
+router.post("/refund", authenticate, authorize("customer"), PaymentController.cancelOrder);
+
+/**
+ * @openapi
  * /payments/webhook:
  *   post:
  *     summary: Stripe webhook endpoint (called by Stripe, not by clients)

@@ -924,8 +924,19 @@ describe("OrderService.getOrderById", () => {
       fulfillment_status: "pending",
       tracking_number: null,
       carrier: null,
+      shipped_at: null,
+      delivered_at: null,
       products: { name: "Surgical Gloves", images: ["img/gloves.jpg"] },
       suppliers: { business_name: "MedSupply Co" },
+      ...overrides,
+    };
+  }
+
+  function makePaymentRow(overrides: Record<string, unknown> = {}) {
+    return {
+      status: "succeeded",
+      payment_method: "card",
+      paid_at: "2026-02-16T00:30:00Z",
       ...overrides,
     };
   }
@@ -943,26 +954,49 @@ describe("OrderService.getOrderById", () => {
     };
   }
 
-  it("returns order with items, enhanced fields, and status_history", async () => {
-    const orderChain = mockQuery({ data: makeFullOrderRow() });
-    const itemsChain = mockQuery({
-      data: [
-        makeDbOrderItem({
-          tracking_number: "1Z999AA10123456784",
-          carrier: "UPS",
-        }),
-      ],
+  // Helper: sets up all 4 from() calls for getOrderById
+  function setupGetById(options: {
+    orderRow?: unknown;
+    items?: unknown[];
+    paymentRow?: unknown;
+    paymentError?: unknown;
+    history?: unknown[];
+  }) {
+    const orderChain = mockQuery({ data: options.orderRow ?? makeFullOrderRow() });
+    const itemsChain = mockQuery({ data: options.items ?? [] });
+    const paymentChain = mockQuery({
+      data: options.paymentRow ?? null,
+      error: options.paymentError ?? null,
     });
-    const historyChain = mockQuery({ data: [makeHistoryRow()] });
+    const historyChain = mockQuery({ data: options.history ?? [] });
 
     mockFrom
       .mockReturnValueOnce(orderChain)
       .mockReturnValueOnce(itemsChain)
+      .mockReturnValueOnce(paymentChain)
       .mockReturnValueOnce(historyChain);
+  }
+
+  it("returns order with items, payment info, and status_history", async () => {
+    setupGetById({
+      items: [
+        makeDbOrderItem({
+          tracking_number: "1Z999AA10123456784",
+          carrier: "UPS",
+          shipped_at: "2026-02-17T10:00:00Z",
+          delivered_at: null,
+        }),
+      ],
+      paymentRow: makePaymentRow(),
+      history: [makeHistoryRow()],
+    });
 
     const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
 
     expect(result.id).toBe(ORDER_ID);
+    expect(result.total_amount).toBe(32.48);
+
+    // Items with fulfillment tracking
     expect(result.items).toHaveLength(1);
     expect(result.items[0].unit_price).toBe(15.0);
     expect(result.items[0].product_name).toBe("Surgical Gloves");
@@ -970,24 +1004,113 @@ describe("OrderService.getOrderById", () => {
     expect(result.items[0].supplier_name).toBe("MedSupply Co");
     expect(result.items[0].tracking_number).toBe("1Z999AA10123456784");
     expect(result.items[0].carrier).toBe("UPS");
+    expect(result.items[0].shipped_at).toBe("2026-02-17T10:00:00Z");
+    expect(result.items[0].delivered_at).toBeNull();
     expect(result.items[0].fulfillment_status).toBe("pending");
+
+    // Payment
+    expect(result.payment).toEqual({
+      status: "succeeded",
+      method: "card",
+      paidAt: "2026-02-16T00:30:00Z",
+    });
+
+    // History
     expect(result.status_history).toHaveLength(1);
     expect(result.status_history![0].to_status).toBe("payment_processing");
-    expect(result.total_amount).toBe(32.48);
+  });
+
+  it("returns payment as null when no succeeded payment exists", async () => {
+    setupGetById({
+      paymentRow: null,
+      paymentError: { message: "not found" },
+    });
+
+    const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
+
+    expect(result.payment).toBeNull();
+  });
+
+  it("returns payment with null method and paidAt when fields missing", async () => {
+    setupGetById({
+      paymentRow: makePaymentRow({ payment_method: null, paid_at: null }),
+    });
+
+    const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
+
+    expect(result.payment).toEqual({
+      status: "succeeded",
+      method: null,
+      paidAt: null,
+    });
+  });
+
+  it("returns items with shipped_at and delivered_at dates", async () => {
+    setupGetById({
+      items: [
+        makeDbOrderItem({
+          fulfillment_status: "delivered",
+          shipped_at: "2026-02-17T10:00:00Z",
+          delivered_at: "2026-02-18T14:00:00Z",
+        }),
+      ],
+      paymentRow: makePaymentRow(),
+    });
+
+    const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
+
+    expect(result.items[0].shipped_at).toBe("2026-02-17T10:00:00Z");
+    expect(result.items[0].delivered_at).toBe("2026-02-18T14:00:00Z");
+    expect(result.items[0].fulfillment_status).toBe("delivered");
+  });
+
+  it("status history is returned in descending order (newest first)", async () => {
+    const history = [
+      makeHistoryRow({
+        id: "hist-3",
+        to_status: "partially_shipped",
+        created_at: "2026-02-18T12:00:00Z",
+      }),
+      makeHistoryRow({
+        id: "hist-2",
+        to_status: "confirmed",
+        created_at: "2026-02-16T01:00:00Z",
+      }),
+      makeHistoryRow({
+        id: "hist-1",
+        from_status: null,
+        to_status: "pending_payment",
+        created_at: "2026-02-16T00:00:00Z",
+      }),
+    ];
+
+    setupGetById({ paymentRow: makePaymentRow(), history });
+
+    const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
+
+    expect(result.status_history).toHaveLength(3);
+    const timestamps = result.status_history!.map((h) => h.created_at);
+    for (let i = 0; i < timestamps.length - 1; i++) {
+      expect(new Date(timestamps[i]).getTime()).toBeGreaterThanOrEqual(
+        new Date(timestamps[i + 1]).getTime(),
+      );
+    }
   });
 
   it("allows customer to view own order", async () => {
-    const orderChain = mockQuery({ data: makeFullOrderRow({ customer_id: USER_ID }) });
-    const itemsChain = mockQuery({ data: [] });
-    const historyChain = mockQuery({ data: [] });
-
-    mockFrom
-      .mockReturnValueOnce(orderChain)
-      .mockReturnValueOnce(itemsChain)
-      .mockReturnValueOnce(historyChain);
+    setupGetById({ paymentRow: null });
 
     const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
     expect(result.id).toBe(ORDER_ID);
+  });
+
+  it("allows admin to view any order", async () => {
+    setupGetById({ paymentRow: makePaymentRow() });
+
+    const result = await OrderService.getOrderById(ORDER_ID, "admin-user-id", "admin");
+
+    expect(result.id).toBe(ORDER_ID);
+    expect(result.payment).not.toBeNull();
   });
 
   it("throws forbidden when customer tries to view another's order", async () => {
@@ -1006,5 +1129,18 @@ describe("OrderService.getOrderById", () => {
     await expect(OrderService.getOrderById(ORDER_ID, USER_ID, "customer")).rejects.toThrow(
       "Order not found",
     );
+  });
+
+  it("returns empty status history and null payment when none exist", async () => {
+    setupGetById({
+      paymentRow: null,
+      paymentError: { message: "not found" },
+      history: [],
+    });
+
+    const result = await OrderService.getOrderById(ORDER_ID, USER_ID, "customer");
+
+    expect(result.status_history).toEqual([]);
+    expect(result.payment).toBeNull();
   });
 });

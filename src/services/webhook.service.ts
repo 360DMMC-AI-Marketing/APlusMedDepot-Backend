@@ -4,7 +4,7 @@ import { getStripe } from "../config/stripe";
 import { getEnv } from "../config/env";
 import { supabaseAdmin } from "../config/supabase";
 import { onPaymentSuccess, onPaymentRefunded } from "./hooks/paymentHooks";
-import { sendOrderConfirmation } from "./email.service";
+import { OrderConfirmationService } from "./orderConfirmation.service";
 import { logSuspiciousActivity } from "../utils/securityLogger";
 
 const MAX_PROCESSED_EVENTS = 10_000;
@@ -63,9 +63,7 @@ export class WebhookService {
 
     const { data: order, error } = await supabaseAdmin
       .from("orders")
-      .select(
-        "id, customer_id, payment_status, order_number, total_amount, created_at, order_items(id, product_name, quantity, unit_price, subtotal, suppliers(business_name))",
-      )
+      .select("id, payment_status")
       .eq("id", orderId)
       .single();
 
@@ -97,33 +95,9 @@ export class WebhookService {
     await onPaymentSuccess(orderId);
 
     try {
-      const { data: customer } = await supabaseAdmin
-        .from("users")
-        .select("email")
-        .eq("id", order.customer_id)
-        .single();
-
-      if (customer?.email) {
-        const items = (order.order_items as unknown as Array<Record<string, unknown>>) ?? [];
-        sendOrderConfirmation(
-          {
-            id: order.order_number ?? orderId,
-            createdAt: order.created_at as string | undefined,
-            status: "confirmed",
-            total: Number(order.total_amount),
-            items: items.map((item) => ({
-              name: item.product_name as string,
-              quantity: item.quantity as number,
-              unitPrice: Number(item.unit_price),
-              lineSubtotal: Number(item.subtotal),
-              supplierName: (item.suppliers as { business_name?: string } | null)?.business_name,
-            })),
-          },
-          customer.email,
-        );
-      }
+      await OrderConfirmationService.confirmOrder(orderId);
     } catch (err) {
-      console.error("[WEBHOOK] Failed to send order confirmation email:", err);
+      console.error("[WEBHOOK] Failed to run order confirmation:", err);
     }
   }
 

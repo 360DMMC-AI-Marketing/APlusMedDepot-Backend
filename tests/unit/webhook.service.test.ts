@@ -31,8 +31,12 @@ jest.mock("../../src/services/hooks/paymentHooks", () => ({
   onPaymentRefunded: mockOnPaymentRefunded,
 }));
 
-jest.mock("../../src/services/email.service", () => ({
-  sendOrderConfirmation: jest.fn(),
+const mockConfirmOrder = jest.fn().mockResolvedValue(undefined);
+
+jest.mock("../../src/services/orderConfirmation.service", () => ({
+  OrderConfirmationService: {
+    confirmOrder: mockConfirmOrder,
+  },
 }));
 
 jest.mock("../../src/utils/securityLogger", () => ({
@@ -76,12 +80,7 @@ function makeEvent(
 function makeOrder(overrides: Record<string, unknown> = {}) {
   return {
     id: ORDER_ID,
-    customer_id: "customer-uuid-1",
     payment_status: "processing",
-    order_number: "ORD-001",
-    total_amount: "64.93",
-    created_at: "2026-02-22T00:00:00Z",
-    order_items: [],
     ...overrides,
   };
 }
@@ -160,15 +159,13 @@ describe("WebhookService", () => {
       const selectChain = mockSelectQuery({ data: makeOrder() });
       const updateChain = mockUpdateQuery();
       const insertChain = mockInsertQuery();
-      const userSelectChain = mockSelectQuery({ data: { email: "cust@test.com" } });
 
       let callCount = 0;
       mockFrom.mockImplementation(() => {
         callCount++;
         if (callCount === 1) return selectChain; // order select
         if (callCount === 2) return updateChain; // order update
-        if (callCount === 3) return insertChain; // payments insert
-        return userSelectChain; // user select for email
+        return insertChain; // payments insert
       });
 
       await WebhookService.handlePaymentSuccess(event);
@@ -201,15 +198,13 @@ describe("WebhookService", () => {
       const selectChain = mockSelectQuery({ data: makeOrder() });
       const updateChain = mockUpdateQuery();
       const insertChain = mockInsertQuery();
-      const userSelectChain = mockSelectQuery({ data: { email: "cust@test.com" } });
 
       let callCount = 0;
       mockFrom.mockImplementation(() => {
         callCount++;
         if (callCount === 1) return selectChain;
         if (callCount === 2) return updateChain;
-        if (callCount === 3) return insertChain;
-        return userSelectChain;
+        return insertChain;
       });
 
       await WebhookService.handlePaymentSuccess(event);
@@ -225,27 +220,26 @@ describe("WebhookService", () => {
       );
     });
 
-    it("calls onPaymentSuccess hook", async () => {
+    it("calls onPaymentSuccess hook and confirmOrder", async () => {
       const pi = makePaymentIntent();
       const event = makeEvent("payment_intent.succeeded", pi);
 
       const selectChain = mockSelectQuery({ data: makeOrder() });
       const updateChain = mockUpdateQuery();
       const insertChain = mockInsertQuery();
-      const userSelectChain = mockSelectQuery({ data: { email: "cust@test.com" } });
 
       let callCount = 0;
       mockFrom.mockImplementation(() => {
         callCount++;
         if (callCount === 1) return selectChain;
         if (callCount === 2) return updateChain;
-        if (callCount === 3) return insertChain;
-        return userSelectChain;
+        return insertChain;
       });
 
       await WebhookService.handlePaymentSuccess(event);
 
       expect(mockOnPaymentSuccess).toHaveBeenCalledWith(ORDER_ID);
+      expect(mockConfirmOrder).toHaveBeenCalledWith(ORDER_ID);
     });
 
     it("returns early when metadata missing order_id", async () => {
@@ -437,15 +431,13 @@ describe("WebhookService", () => {
       const selectChain = mockSelectQuery({ data: makeOrder() });
       const updateChain = mockUpdateQuery();
       const insertChain = mockInsertQuery();
-      const userSelectChain = mockSelectQuery({ data: { email: "cust@test.com" } });
 
       let callCount = 0;
       mockFrom.mockImplementation(() => {
         callCount++;
         if (callCount === 1) return selectChain;
         if (callCount === 2) return updateChain;
-        if (callCount === 3) return insertChain;
-        return userSelectChain;
+        return insertChain;
       });
 
       await WebhookService.handlePaymentSuccess(event);

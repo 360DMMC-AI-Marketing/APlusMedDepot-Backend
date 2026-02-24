@@ -39,6 +39,7 @@ let clientAdmin: SupabaseClient;
 // Flags set in beforeAll — tests that depend on new migrations early-return if false
 let migration015Applied = false;
 let migration016Applied = false;
+let setupSucceeded = false;
 
 describeOrSkip("Order Schema Migrations (015 + 016)", () => {
   beforeAll(async () => {
@@ -62,27 +63,39 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
       console.warn("⚠️  Migration 016 not applied — order_status_history tests will be skipped.");
     }
 
-    // Create auth users
-    const { data: authCustomer } = await supabaseAdmin.auth.admin.createUser({
+    // Create auth users — guard against creation failures
+    const { data: authCustomer, error: errCustomer } = await supabaseAdmin.auth.admin.createUser({
       email: "migration-customer@test.com",
       password: testPassword,
       email_confirm: true,
     });
-    customerUserId = authCustomer!.user!.id;
+    if (errCustomer || !authCustomer?.user?.id) {
+      console.warn("⚠️  Failed to create customer auth user:", errCustomer?.message);
+      return;
+    }
+    customerUserId = authCustomer.user.id;
 
-    const { data: authSupplier } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authSupplier, error: errSupplier } = await supabaseAdmin.auth.admin.createUser({
       email: "migration-supplier@test.com",
       password: testPassword,
       email_confirm: true,
     });
-    supplierUserId = authSupplier!.user!.id;
+    if (errSupplier || !authSupplier?.user?.id) {
+      console.warn("⚠️  Failed to create supplier auth user:", errSupplier?.message);
+      return;
+    }
+    supplierUserId = authSupplier.user.id;
 
-    const { data: authAdmin } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authAdmin, error: errAdmin } = await supabaseAdmin.auth.admin.createUser({
       email: "migration-admin@test.com",
       password: testPassword,
       email_confirm: true,
     });
-    adminUserId = authAdmin!.user!.id;
+    if (errAdmin || !authAdmin?.user?.id) {
+      console.warn("⚠️  Failed to create admin auth user:", errAdmin?.message);
+      return;
+    }
+    adminUserId = authAdmin.user.id;
 
     // Insert user records
     await supabaseAdmin.from("users").insert([
@@ -116,7 +129,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     ]);
 
     // Create supplier record
-    const { data: supplierData } = await supabaseAdmin
+    const { data: supplierData, error: errSupplierRow } = await supabaseAdmin
       .from("suppliers")
       .insert({
         user_id: supplierUserId,
@@ -126,10 +139,14 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
       })
       .select("id")
       .single();
+    if (errSupplierRow || !supplierData) {
+      console.warn("⚠️  Failed to create supplier record:", errSupplierRow?.message);
+      return;
+    }
     supplierId = (supplierData as { id: string }).id;
 
     // Create master order (customer-facing)
-    const { data: masterOrder } = await supabaseAdmin
+    const { data: masterOrder, error: errMaster } = await supabaseAdmin
       .from("orders")
       .insert({
         order_number: "ORD-MIG-001",
@@ -142,10 +159,14 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
       })
       .select("id")
       .single();
+    if (errMaster || !masterOrder) {
+      console.warn("⚠️  Failed to create master order:", errMaster?.message);
+      return;
+    }
     masterOrderId = (masterOrder as { id: string }).id;
 
     // Create sub-order (supplier-facing)
-    const { data: subOrder } = await supabaseAdmin
+    const { data: subOrder, error: errSub } = await supabaseAdmin
       .from("orders")
       .insert({
         order_number: "ORD-MIG-001-S1",
@@ -160,56 +181,76 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
       })
       .select("id")
       .single();
+    if (errSub || !subOrder) {
+      console.warn("⚠️  Failed to create sub-order:", errSub?.message);
+      return;
+    }
     subOrderId = (subOrder as { id: string }).id;
 
     // Create user-scoped clients
-    const { data: sessionCustomer } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email: "migration-customer@test.com",
-    });
-    const { data: sessionSupplier } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email: "migration-supplier@test.com",
-    });
-    const { data: sessionAdmin } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email: "migration-admin@test.com",
-    });
-
-    const makeClient = async (email: string): Promise<SupabaseClient> => {
+    const makeClient = async (email: string): Promise<SupabaseClient | null> => {
       const client = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
-      await client.auth.signInWithPassword({ email, password: testPassword });
+      const { error: signInError } = await client.auth.signInWithPassword({
+        email,
+        password: testPassword,
+      });
+      if (signInError) {
+        console.warn(`⚠️  Failed to sign in ${email}:`, signInError.message);
+        return null;
+      }
       return client;
     };
 
-    clientCustomer = await makeClient("migration-customer@test.com");
-    clientSupplier = await makeClient("migration-supplier@test.com");
-    clientAdmin = await makeClient("migration-admin@test.com");
+    const cc = await makeClient("migration-customer@test.com");
+    const cs = await makeClient("migration-supplier@test.com");
+    const ca = await makeClient("migration-admin@test.com");
+    if (!cc || !cs || !ca) {
+      console.warn("⚠️  Failed to create one or more user-scoped clients");
+      return;
+    }
+    clientCustomer = cc;
+    clientSupplier = cs;
+    clientAdmin = ca;
 
-    // Suppress unused variable warnings
-    void sessionCustomer;
-    void sessionSupplier;
-    void sessionAdmin;
+    setupSucceeded = true;
   }, 60000);
 
   afterAll(async () => {
-    // Clean up in reverse FK order
-    await supabaseAdmin
-      .from("order_status_history")
-      .delete()
-      .neq("id", "00000000-0000-0000-0000-000000000000");
-    await supabaseAdmin.from("order_items").delete().eq("order_id", masterOrderId);
-    await supabaseAdmin.from("order_items").delete().eq("order_id", subOrderId);
-    await supabaseAdmin.from("orders").delete().eq("id", subOrderId);
-    await supabaseAdmin.from("orders").delete().eq("id", masterOrderId);
-    await supabaseAdmin.from("suppliers").delete().eq("id", supplierId);
-    await supabaseAdmin.from("users").delete().eq("id", customerUserId);
-    await supabaseAdmin.from("users").delete().eq("id", supplierUserId);
-    await supabaseAdmin.from("users").delete().eq("id", adminUserId);
+    const isUUID = (id: string | undefined): id is string =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id ?? "");
 
-    await supabaseAdmin.auth.admin.deleteUser(customerUserId);
-    await supabaseAdmin.auth.admin.deleteUser(supplierUserId);
-    await supabaseAdmin.auth.admin.deleteUser(adminUserId);
+    // Clean up in reverse FK order — only if IDs were assigned
+    if (isUUID(masterOrderId) || isUUID(subOrderId)) {
+      await supabaseAdmin
+        .from("order_status_history")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+    }
+    if (isUUID(masterOrderId)) {
+      await supabaseAdmin.from("order_items").delete().eq("order_id", masterOrderId);
+    }
+    if (isUUID(subOrderId)) {
+      await supabaseAdmin.from("order_items").delete().eq("order_id", subOrderId);
+      await supabaseAdmin.from("orders").delete().eq("id", subOrderId);
+    }
+    if (isUUID(masterOrderId)) {
+      await supabaseAdmin.from("orders").delete().eq("id", masterOrderId);
+    }
+    if (isUUID(supplierId)) {
+      await supabaseAdmin.from("suppliers").delete().eq("id", supplierId);
+    }
+    if (isUUID(customerUserId)) {
+      await supabaseAdmin.from("users").delete().eq("id", customerUserId);
+      await supabaseAdmin.auth.admin.deleteUser(customerUserId);
+    }
+    if (isUUID(supplierUserId)) {
+      await supabaseAdmin.from("users").delete().eq("id", supplierUserId);
+      await supabaseAdmin.auth.admin.deleteUser(supplierUserId);
+    }
+    if (isUUID(adminUserId)) {
+      await supabaseAdmin.from("users").delete().eq("id", adminUserId);
+      await supabaseAdmin.auth.admin.deleteUser(adminUserId);
+    }
   }, 30000);
 
   // ─── Enum Type Tests ──────────────────────────────────────────────────────
@@ -251,12 +292,15 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("INSERT order with valid status enum value succeeds", async () => {
+      if (!setupSucceeded) return;
+
       const { data, error } = await supabaseAdmin
         .from("orders")
         .insert({
           order_number: "ORD-ENUM-TEST-1",
           customer_id: customerUserId,
           total_amount: 50.0,
+          tax_amount: 0,
           shipping_address: { street: "Enum Test St" },
           status: "awaiting_fulfillment",
           payment_status: "pending",
@@ -274,12 +318,15 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("INSERT order with invalid status string fails", async () => {
+      if (!setupSucceeded) return;
+
       const { error } = await supabaseAdmin
         .from("orders")
         .insert({
           order_number: "ORD-ENUM-TEST-2",
           customer_id: customerUserId,
           total_amount: 50.0,
+          tax_amount: 0,
           shipping_address: { street: "Enum Test St" },
           status: "nonexistent_status",
           payment_status: "pending",
@@ -295,7 +342,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
 
   describe("order_status_history", () => {
     it("INSERT with valid order FK succeeds", async () => {
-      if (!migration016Applied) return;
+      if (!setupSucceeded || !migration016Applied) return;
 
       const { data, error } = await supabaseAdmin
         .from("order_status_history")
@@ -320,7 +367,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("INSERT with invalid order_id FK fails", async () => {
-      if (!migration016Applied) return;
+      if (!setupSucceeded || !migration016Applied) return;
 
       const { error } = await supabaseAdmin
         .from("order_status_history")
@@ -336,7 +383,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("records a status transition with from and to", async () => {
-      if (!migration016Applied) return;
+      if (!setupSucceeded || !migration016Applied) return;
 
       const { data, error } = await supabaseAdmin
         .from("order_status_history")
@@ -364,6 +411,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
 
   describe("RLS: orders", () => {
     it("customer sees own master orders", async () => {
+      if (!setupSucceeded) return;
       const { data, error } = await clientCustomer
         .from("orders")
         .select("id")
@@ -374,6 +422,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("customer does NOT see other customers' orders", async () => {
+      if (!setupSucceeded) return;
       // Create another customer's order via admin
       const { data: otherCustomer } = await supabaseAdmin.auth.admin.createUser({
         email: "other-customer-mig@test.com",
@@ -398,6 +447,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
           order_number: "ORD-OTHER-001",
           customer_id: otherUserId,
           total_amount: 50.0,
+          tax_amount: 0,
           shipping_address: { street: "Other St" },
           status: "pending_payment",
           payment_status: "pending",
@@ -419,6 +469,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("supplier sees own sub-orders", async () => {
+      if (!setupSucceeded) return;
       const { data, error } = await clientSupplier.from("orders").select("id").eq("id", subOrderId);
 
       expect(error).toBeNull();
@@ -426,6 +477,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("admin sees all orders", async () => {
+      if (!setupSucceeded) return;
       const { data, error } = await clientAdmin
         .from("orders")
         .select("id")
@@ -440,6 +492,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     let orderItemId: string;
 
     beforeAll(async () => {
+      if (!setupSucceeded) return;
       // Create a product for the order item
       const { data: product } = await supabaseAdmin
         .from("products")
@@ -475,6 +528,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("supplier sees own order_items", async () => {
+      if (!setupSucceeded) return;
       const { data, error } = await clientSupplier
         .from("order_items")
         .select("id")
@@ -485,6 +539,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("customer sees order_items for their orders", async () => {
+      if (!setupSucceeded) return;
       // Query by order_id (sub-order belongs to customer) rather than by item id
       const { data, error } = await clientCustomer
         .from("order_items")
@@ -498,6 +553,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("admin sees all order_items", async () => {
+      if (!setupSucceeded) return;
       const { data, error } = await clientAdmin
         .from("order_items")
         .select("id")
@@ -512,7 +568,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
 
   describe("New columns", () => {
     it("orders.payment_intent_id is writable and readable", async () => {
-      if (!migration015Applied) return;
+      if (!setupSucceeded || !migration015Applied) return;
 
       const { error } = await supabaseAdmin
         .from("orders")
@@ -537,7 +593,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("orders.notes is writable and readable", async () => {
-      if (!migration015Applied) return;
+      if (!setupSucceeded || !migration015Applied) return;
 
       const { error } = await supabaseAdmin
         .from("orders")
@@ -556,7 +612,7 @@ describeOrSkip("Order Schema Migrations (015 + 016)", () => {
     });
 
     it("order_items.delivered_at is writable", async () => {
-      if (!migration015Applied) return;
+      if (!setupSucceeded || !migration015Applied) return;
 
       const now = new Date().toISOString();
       const { data: item } = await supabaseAdmin

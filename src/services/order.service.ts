@@ -4,7 +4,13 @@ import { isValidTransition, getNextStatuses } from "../utils/orderStateMachine";
 import { checkAndDecrementStock, incrementStock } from "../utils/inventory";
 import { splitOrderBySupplier } from "./orderSplitting.service";
 import type { ShippingAddress } from "../types/checkout.types";
-import type { Order, OrderItem, OrderStatusHistory, OrderListResult } from "../types/order.types";
+import type {
+  Order,
+  OrderItem,
+  OrderPayment,
+  OrderStatusHistory,
+  OrderListResult,
+} from "../types/order.types";
 import type { OrderStatus } from "../utils/orderStateMachine";
 import type { StockDecrementItem, IncrementItem } from "../utils/inventory";
 
@@ -574,7 +580,7 @@ export class OrderService {
     const { data: itemsData, error: itemsError } = await supabaseAdmin
       .from("order_items")
       .select(
-        "id, order_id, product_id, supplier_id, quantity, unit_price, subtotal, fulfillment_status, tracking_number, carrier, products(name, images), suppliers(business_name)",
+        "id, order_id, product_id, supplier_id, quantity, unit_price, subtotal, fulfillment_status, tracking_number, carrier, shipped_at, delivered_at, products(name, images), suppliers(business_name)",
       )
       .eq("order_id", orderId);
 
@@ -593,6 +599,8 @@ export class OrderService {
       fulfillment_status: string;
       tracking_number: string | null;
       carrier: string | null;
+      shipped_at: string | null;
+      delivered_at: string | null;
       products: { name: string; images: string[] | null } | null;
       suppliers: { business_name: string } | null;
     };
@@ -611,11 +619,28 @@ export class OrderService {
       fulfillment_status: dbItem.fulfillment_status,
       tracking_number: dbItem.tracking_number ?? null,
       carrier: dbItem.carrier ?? null,
+      shipped_at: dbItem.shipped_at ?? null,
+      delivered_at: dbItem.delivered_at ?? null,
       product_image: (dbItem.products?.images ?? [])[0] ?? null,
       supplier_name: dbItem.suppliers?.business_name ?? "",
     }));
 
-    // 4. Fetch status history
+    // 4. Fetch payment info
+    const { data: paymentData } = await supabaseAdmin
+      .from("payments")
+      .select("status, payment_method, paid_at")
+      .eq("order_id", orderId)
+      .eq("status", "succeeded")
+      .single();
+
+    type PaymentRow = { status: string; payment_method: string | null; paid_at: string | null };
+    const paymentRow = paymentData as unknown as PaymentRow | null;
+
+    const payment: OrderPayment | null = paymentRow
+      ? { status: paymentRow.status, method: paymentRow.payment_method, paidAt: paymentRow.paid_at }
+      : null;
+
+    // 5. Fetch status history
     const { data: historyData, error: historyError } = await supabaseAdmin
       .from("order_status_history")
       .select("id, order_id, from_status, to_status, changed_by, reason, created_at")
@@ -642,6 +667,7 @@ export class OrderService {
       payment_intent_id: order.payment_intent_id,
       notes: order.notes,
       items: responseItems,
+      payment,
       status_history: statusHistory,
       created_at: order.created_at,
       updated_at: order.updated_at,
