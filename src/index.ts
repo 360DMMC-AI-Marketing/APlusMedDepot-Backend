@@ -21,6 +21,7 @@ import checkoutRoutes from "./routes/checkout.routes";
 import supplierProductRoutes from "./routes/supplierProduct.routes";
 import supplierInventoryRoutes from "./routes/supplierInventory.routes";
 import supplierAnalyticsRoutes from "./routes/supplierAnalytics.routes";
+import commissionRoutes from "./routes/commission.routes";
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/suppliers", adminSupplierRoutes);
 app.use("/api/checkout", checkoutRoutes);
+app.use("/api/commissions", commissionRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
