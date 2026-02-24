@@ -15,12 +15,14 @@ jest.mock("../../src/services/auth.service", () => ({
 const mockGetSupplierOrders = jest.fn();
 const mockGetSupplierOrderDetail = jest.fn();
 const mockGetSupplierOrderStats = jest.fn();
+const mockUpdateItemFulfillment = jest.fn();
 
 jest.mock("../../src/services/supplierOrder.service", () => ({
   SupplierOrderService: {
     getSupplierOrders: mockGetSupplierOrders,
     getSupplierOrderDetail: mockGetSupplierOrderDetail,
     getSupplierOrderStats: mockGetSupplierOrderStats,
+    updateItemFulfillment: mockUpdateItemFulfillment,
   },
 }));
 
@@ -46,6 +48,7 @@ import { AppError } from "../../src/utils/errors";
 const SUPPLIER_ID = "b0000000-0000-4000-8000-000000000001";
 const SUB_ORDER_ID = "c0000000-0000-4000-8000-000000000001";
 const MASTER_ORDER_ID = "d0000000-0000-4000-8000-000000000001";
+const ITEM_ID = "e0000000-0000-4000-8000-000000000001";
 
 const supplierUser = {
   id: "user-supplier-order-1",
@@ -329,6 +332,200 @@ describe("Supplier Order API", () => {
       expect(res.body.statusCounts.processing).toBe(2);
       expect(res.body.statusCounts.shipped).toBe(1);
       expect(res.body.statusCounts.delivered).toBe(4);
+    });
+  });
+
+  // =========================================================================
+  // PUT /api/suppliers/me/orders/items/:itemId/fulfillment
+  // =========================================================================
+  describe("PUT /api/suppliers/me/orders/items/:itemId/fulfillment", () => {
+    it("pending → processing succeeds", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({ fulfillmentStatus: "processing" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Fulfillment status updated");
+      expect(mockUpdateItemFulfillment).toHaveBeenCalledWith(SUPPLIER_ID, ITEM_ID, {
+        fulfillmentStatus: "processing",
+        trackingNumber: undefined,
+        carrier: undefined,
+      });
+    });
+
+    it("processing → shipped with tracking succeeds", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({
+          fulfillmentStatus: "shipped",
+          trackingNumber: "1Z999AA10123456784",
+          carrier: "UPS",
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Fulfillment status updated");
+      expect(mockUpdateItemFulfillment).toHaveBeenCalledWith(SUPPLIER_ID, ITEM_ID, {
+        fulfillmentStatus: "shipped",
+        trackingNumber: "1Z999AA10123456784",
+        carrier: "UPS",
+      });
+    });
+
+    it("shipped → delivered succeeds", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({ fulfillmentStatus: "delivered" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Fulfillment status updated");
+      expect(mockUpdateItemFulfillment).toHaveBeenCalledWith(SUPPLIER_ID, ITEM_ID, {
+        fulfillmentStatus: "delivered",
+        trackingNumber: undefined,
+        carrier: undefined,
+      });
+    });
+
+    it("shipped without tracking → validation error", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({ fulfillmentStatus: "shipped" });
+
+      expect(res.status).toBe(400);
+      expect(mockUpdateItemFulfillment).not.toHaveBeenCalled();
+    });
+
+    it("backward transition (shipped → processing) → rejected", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockRejectedValue(
+        new AppError("Cannot transition from shipped to processing", 409, "CONFLICT"),
+      );
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({ fulfillmentStatus: "processing" });
+
+      expect(res.status).toBe(409);
+    });
+
+    it("wrong supplier → 403", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockRejectedValue(
+        new AppError("This item does not belong to your supplier account", 403, "FORBIDDEN"),
+      );
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({ fulfillmentStatus: "processing" });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("master order auto-updates to partially_shipped when first item ships", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({
+          fulfillmentStatus: "shipped",
+          trackingNumber: "9400111899223100001",
+          carrier: "USPS",
+        });
+
+      expect(res.status).toBe(200);
+      expect(mockUpdateItemFulfillment).toHaveBeenCalledWith(SUPPLIER_ID, ITEM_ID, {
+        fulfillmentStatus: "shipped",
+        trackingNumber: "9400111899223100001",
+        carrier: "USPS",
+      });
+    });
+
+    it("master order auto-updates to shipped when ALL items shipped", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockResolvedValue(undefined);
+
+      const secondItemId = "e0000000-0000-4000-8000-000000000002";
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${secondItemId}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({
+          fulfillmentStatus: "shipped",
+          trackingNumber: "794644790132",
+          carrier: "FedEx",
+        });
+
+      expect(res.status).toBe(200);
+      expect(mockUpdateItemFulfillment).toHaveBeenCalledWith(SUPPLIER_ID, secondItemId, {
+        fulfillmentStatus: "shipped",
+        trackingNumber: "794644790132",
+        carrier: "FedEx",
+      });
+    });
+
+    it("master order auto-updates to delivered when ALL items delivered", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({ fulfillmentStatus: "delivered" });
+
+      expect(res.status).toBe(200);
+      expect(mockUpdateItemFulfillment).toHaveBeenCalledWith(SUPPLIER_ID, ITEM_ID, {
+        fulfillmentStatus: "delivered",
+        trackingNumber: undefined,
+        carrier: undefined,
+      });
+    });
+
+    it("shipping notification email triggered on shipped status", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockUpdateItemFulfillment.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .put(`/api/suppliers/me/orders/items/${ITEM_ID}/fulfillment`)
+        .set("Authorization", "Bearer valid-token")
+        .send({
+          fulfillmentStatus: "shipped",
+          trackingNumber: "5012345678",
+          carrier: "DHL",
+        });
+
+      expect(res.status).toBe(200);
+      expect(mockUpdateItemFulfillment).toHaveBeenCalledWith(SUPPLIER_ID, ITEM_ID, {
+        fulfillmentStatus: "shipped",
+        trackingNumber: "5012345678",
+        carrier: "DHL",
+      });
     });
   });
 });

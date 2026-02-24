@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../config/supabase";
-import { forbidden, notFound } from "../utils/errors";
+import { conflict, forbidden, notFound } from "../utils/errors";
+import { sendShippingNotification } from "./email.service";
 import type {
   SupplierOrderView,
   SupplierOrderDetail,
@@ -355,6 +356,223 @@ export class SupplierOrderService {
       averageOrderValue,
       statusCounts,
     };
+  }
+
+  static async updateItemFulfillment(
+    supplierId: string,
+    orderItemId: string,
+    data: {
+      fulfillmentStatus: "processing" | "shipped" | "delivered";
+      trackingNumber?: string;
+      carrier?: string;
+    },
+  ): Promise<void> {
+    // Fetch the order item and verify supplier ownership
+    const { data: itemData, error: itemError } = await supabaseAdmin
+      .from("order_items")
+      .select(
+        "id, order_id, supplier_id, product_id, quantity, unit_price, fulfillment_status, products(name)",
+      )
+      .eq("id", orderItemId)
+      .single();
+
+    if (itemError || !itemData) {
+      throw notFound("Order item");
+    }
+
+    type FulfillmentItemRow = {
+      id: string;
+      order_id: string;
+      supplier_id: string;
+      product_id: string;
+      quantity: number;
+      unit_price: string;
+      fulfillment_status: string;
+      products: { name: string } | null;
+    };
+
+    const item = itemData as unknown as FulfillmentItemRow;
+
+    if (item.supplier_id !== supplierId) {
+      throw forbidden("You can only update your own order items");
+    }
+
+    // Validate state transition
+    const currentStatus = item.fulfillment_status;
+    const newStatus = data.fulfillmentStatus;
+
+    const validTransitions: Record<string, string[]> = {
+      pending: ["processing"],
+      processing: ["shipped"],
+      shipped: ["delivered"],
+    };
+
+    const allowed = validTransitions[currentStatus] ?? [];
+    if (!allowed.includes(newStatus)) {
+      throw conflict(`Invalid status transition from '${currentStatus}' to '${newStatus}'`);
+    }
+
+    // Build update payload
+    const updatePayload: Record<string, unknown> = {
+      fulfillment_status: newStatus,
+    };
+
+    if (newStatus === "shipped") {
+      updatePayload.tracking_number = data.trackingNumber;
+      updatePayload.carrier = data.carrier;
+      updatePayload.shipped_at = new Date().toISOString();
+    }
+
+    if (newStatus === "delivered") {
+      updatePayload.delivered_at = new Date().toISOString();
+    }
+
+    // Update the order item
+    const { error: updateError } = await supabaseAdmin
+      .from("order_items")
+      .update(updatePayload)
+      .eq("id", orderItemId);
+
+    if (updateError) {
+      throw new Error(`Failed to update fulfillment status: ${updateError.message}`);
+    }
+
+    // Fire-and-forget: send shipping notification email
+    if (newStatus === "shipped") {
+      try {
+        // Fetch order and customer info for the email
+        const { data: orderData } = await supabaseAdmin
+          .from("orders")
+          .select("id, order_number, customer_id")
+          .eq("id", item.order_id)
+          .single();
+
+        if (orderData) {
+          const order = orderData as unknown as {
+            id: string;
+            order_number: string;
+            customer_id: string;
+          };
+
+          const { data: customerData } = await supabaseAdmin
+            .from("users")
+            .select("email")
+            .eq("id", order.customer_id)
+            .single();
+
+          const customer = customerData as unknown as { email: string } | null;
+
+          // Fetch supplier name
+          const { data: supplierData } = await supabaseAdmin
+            .from("suppliers")
+            .select("business_name")
+            .eq("id", supplierId)
+            .single();
+
+          const supplier = supplierData as unknown as { business_name: string } | null;
+
+          sendShippingNotification(
+            {
+              id: order.order_number,
+              customerEmail: customer?.email,
+            },
+            {
+              name: item.products?.name,
+              quantity: item.quantity,
+              unitPrice: Number(item.unit_price),
+              supplierName: supplier?.business_name,
+            },
+            {
+              carrier: data.carrier,
+              trackingNumber: data.trackingNumber,
+            },
+          );
+        }
+      } catch (emailError) {
+        console.error("[FULFILLMENT] Failed to send shipping notification:", emailError);
+      }
+    }
+
+    // Check and update master order status
+    await this.checkAndUpdateMasterOrderStatus(item.order_id);
+  }
+
+  static async checkAndUpdateMasterOrderStatus(masterOrderId: string): Promise<void> {
+    // Fetch ALL order items for this master order
+    const { data: itemsData, error: itemsError } = await supabaseAdmin
+      .from("order_items")
+      .select("fulfillment_status")
+      .eq("order_id", masterOrderId);
+
+    if (itemsError || !itemsData || itemsData.length === 0) {
+      return;
+    }
+
+    type FulfillmentRow = { fulfillment_status: string };
+    const statuses = (itemsData as unknown as FulfillmentRow[]).map(
+      (row) => row.fulfillment_status,
+    );
+
+    // Determine new master order status
+    const allDelivered = statuses.every((s) => s === "delivered");
+    const allShippedOrDelivered = statuses.every((s) => s === "shipped" || s === "delivered");
+    const someShipped = statuses.some((s) => s === "shipped" || s === "delivered");
+
+    let newOrderStatus: string | null = null;
+
+    if (allDelivered) {
+      newOrderStatus = "delivered";
+    } else if (allShippedOrDelivered) {
+      newOrderStatus = "fully_shipped";
+    } else if (someShipped) {
+      newOrderStatus = "partially_shipped";
+    }
+
+    if (!newOrderStatus) {
+      return;
+    }
+
+    // Fetch current master order status
+    const { data: orderData, error: orderError } = await supabaseAdmin
+      .from("orders")
+      .select("id, status")
+      .eq("id", masterOrderId)
+      .is("parent_order_id", null)
+      .single();
+
+    if (orderError || !orderData) {
+      return;
+    }
+
+    const order = orderData as unknown as { id: string; status: string };
+
+    if (order.status === newOrderStatus) {
+      return;
+    }
+
+    // Update the master order status
+    const { error: updateError } = await supabaseAdmin
+      .from("orders")
+      .update({ status: newOrderStatus })
+      .eq("id", masterOrderId);
+
+    if (updateError) {
+      console.error(`[FULFILLMENT] Failed to update master order status: ${updateError.message}`);
+      return;
+    }
+
+    // Insert status history record
+    const { error: historyError } = await supabaseAdmin.from("order_status_history").insert({
+      order_id: masterOrderId,
+      from_status: order.status,
+      to_status: newOrderStatus,
+      changed_by: "system",
+      reason: "Auto-updated from item fulfillment statuses",
+    });
+
+    if (historyError) {
+      console.error(`[FULFILLMENT] Failed to insert status history: ${historyError.message}`);
+    }
   }
 
   private static async getSupplierCommissionRate(supplierId: string): Promise<number> {

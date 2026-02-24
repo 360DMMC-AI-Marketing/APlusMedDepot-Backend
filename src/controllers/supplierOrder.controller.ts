@@ -14,6 +14,25 @@ const orderListQuerySchema = z.object({
 
 const uuidParamSchema = z.string().uuid("Invalid ID format");
 
+const updateFulfillmentSchema = z
+  .object({
+    fulfillmentStatus: z.enum(["processing", "shipped", "delivered"]),
+    trackingNumber: z.string().min(1, "Tracking number is required").optional(),
+    carrier: z.enum(["USPS", "UPS", "FedEx", "DHL", "Other"]).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.fulfillmentStatus === "shipped") {
+        return !!data.trackingNumber && !!data.carrier;
+      }
+      return true;
+    },
+    {
+      message: "trackingNumber and carrier are required when shipping",
+      path: ["trackingNumber"],
+    },
+  );
+
 export class SupplierOrderController {
   /** GET /api/suppliers/me/orders — list supplier's sub-orders */
   static async list(req: Request, res: Response): Promise<void> {
@@ -48,5 +67,20 @@ export class SupplierOrderController {
     const detail = await SupplierOrderService.getSupplierOrderDetail(supplierId, subOrderId);
 
     res.status(200).json(detail);
+  }
+
+  /** PUT /api/suppliers/me/orders/items/:itemId/fulfillment — update fulfillment status */
+  static async updateFulfillment(req: Request, res: Response): Promise<void> {
+    const itemId = uuidParamSchema.parse(req.params.itemId);
+    const validated = updateFulfillmentSchema.parse(req.body);
+    const supplierId = await SupplierProductService.getSupplierIdFromUserId(req.user!.id);
+
+    await SupplierOrderService.updateItemFulfillment(supplierId, itemId, {
+      fulfillmentStatus: validated.fulfillmentStatus,
+      trackingNumber: validated.trackingNumber,
+      carrier: validated.carrier,
+    });
+
+    res.status(200).json({ message: "Fulfillment status updated" });
   }
 }

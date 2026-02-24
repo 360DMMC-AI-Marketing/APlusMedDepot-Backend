@@ -102,4 +102,60 @@ router.get("/stats", authenticate, authorize("supplier"), SupplierOrderControlle
  */
 router.get("/:id", authenticate, authorize("supplier"), SupplierOrderController.getDetail);
 
+/**
+ * @openapi
+ * /suppliers/me/orders/items/{itemId}/fulfillment:
+ *   put:
+ *     summary: Update item fulfillment status
+ *     description: Updates the fulfillment status of a specific order item. Validates state transitions and requires tracking info when shipping.
+ *     tags: [Supplier Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Order item ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fulfillmentStatus]
+ *             properties:
+ *               fulfillmentStatus:
+ *                 type: string
+ *                 enum: [processing, shipped, delivered]
+ *               trackingNumber:
+ *                 type: string
+ *                 description: Required when fulfillmentStatus is 'shipped'
+ *               carrier:
+ *                 type: string
+ *                 enum: [USPS, UPS, FedEx, DHL, Other]
+ *                 description: Required when fulfillmentStatus is 'shipped'
+ *     responses:
+ *       200:
+ *         description: Fulfillment status updated
+ *       400:
+ *         description: Validation error (missing tracking info for shipped)
+ *       401:
+ *         description: Missing or invalid auth token
+ *       403:
+ *         description: Not a supplier or item belongs to another supplier
+ *       404:
+ *         description: Order item not found
+ *       409:
+ *         description: Invalid status transition
+ */
+router.put(
+  "/items/:itemId/fulfillment",
+  authenticate,
+  authorize("supplier"),
+  SupplierOrderController.updateFulfillment,
+);
+
 export default router;
