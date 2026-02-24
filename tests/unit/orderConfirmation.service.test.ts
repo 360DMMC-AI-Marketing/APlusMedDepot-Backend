@@ -40,7 +40,7 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
       zip_code: "78701",
       country: "US",
     },
-    status: "confirmed",
+    status: "payment_confirmed",
     payment_status: "paid",
     created_at: "2026-02-22T00:00:00Z",
     ...overrides,
@@ -154,7 +154,7 @@ describe("OrderConfirmationService", () => {
       expect(mockSendOrderConfirmation).toHaveBeenCalledWith(
         expect.objectContaining({
           id: "ORD-20260222-ABC12",
-          status: "confirmed",
+          status: "payment_confirmed",
           total: 64.93,
           items: expect.arrayContaining([
             expect.objectContaining({ name: "Medical Gloves", quantity: 2 }),
@@ -304,7 +304,7 @@ describe("OrderConfirmationService", () => {
       expect(historyChain.insert).toHaveBeenCalledWith({
         order_id: ORDER_ID,
         from_status: "pending_payment",
-        to_status: "confirmed",
+        to_status: "payment_confirmed",
         changed_by: CUSTOMER_ID,
         reason: "Payment confirmed via Stripe webhook",
       });

@@ -107,7 +107,7 @@ export class PaymentService {
     if (pi.status === "succeeded") {
       await supabaseAdmin
         .from("orders")
-        .update({ payment_status: "paid", status: "confirmed" })
+        .update({ payment_status: "paid", status: "payment_confirmed" })
         .eq("id", orderId)
         .eq("payment_status", "processing");
 
@@ -125,7 +125,7 @@ export class PaymentService {
           {
             id: order.order_number ?? orderId,
             createdAt: order.created_at as string | undefined,
-            status: "confirmed",
+            status: "payment_confirmed",
             total: Number(order.total_amount),
             items: items.map((item) => ({
               name: item.product_name as string,

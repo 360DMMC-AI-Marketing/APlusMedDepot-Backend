@@ -172,7 +172,7 @@ describe("WebhookService", () => {
 
       expect(updateChain.update).toHaveBeenCalledWith({
         payment_status: "paid",
-        status: "confirmed",
+        status: "payment_confirmed",
       });
     });
 
@@ -501,12 +501,12 @@ describe("WebhookService", () => {
     it("evicts oldest event when Set exceeds max size", () => {
       // Fill up to max
       for (let i = 0; i < 10_000; i++) {
-        WebhookService.isDuplicate(`evt_${i}`);
+        WebhookService.markProcessed(`evt_${i}`);
       }
       expect(WebhookService.getProcessedEventsSize()).toBe(10_000);
 
       // Adding one more should evict the oldest
-      WebhookService.isDuplicate("evt_new");
+      WebhookService.markProcessed("evt_new");
       expect(WebhookService.getProcessedEventsSize()).toBe(10_000);
 
       // The oldest (evt_0) should have been evicted

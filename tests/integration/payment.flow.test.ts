@@ -284,7 +284,7 @@ describe("Payment Flow Integration Tests", () => {
       expect(res.body.received).toBe(true);
       expect(updateChain.update).toHaveBeenCalledWith({
         payment_status: "paid",
-        status: "confirmed",
+        status: "payment_confirmed",
       });
       expect(insertChain.insert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -384,7 +384,7 @@ describe("Payment Flow Integration Tests", () => {
 
       const orderSelectChain = mockSelectQuery({
         data: makeOrder({
-          status: "confirmed",
+          status: "payment_confirmed",
           payment_status: "paid",
           payment_intent_id: PI_ID,
         }),
@@ -640,7 +640,7 @@ describe("Payment Flow Integration Tests", () => {
       mockVerifyToken.mockResolvedValue(customerUser);
 
       const selectChain = mockSelectQuery({
-        data: makeOrder({ status: "confirmed", payment_intent_id: PI_ID }),
+        data: makeOrder({ status: "payment_confirmed", payment_intent_id: PI_ID }),
       });
       mockFrom.mockReturnValue(selectChain);
 
