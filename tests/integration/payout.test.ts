@@ -16,6 +16,7 @@ const mockGetSupplierBalance = jest.fn();
 const mockGetPayoutHistory = jest.fn();
 const mockCreatePayoutRecord = jest.fn();
 const mockGetPayoutSummary = jest.fn();
+const mockGeneratePayoutReport = jest.fn();
 
 jest.mock("../../src/services/payout.service", () => ({
   PayoutService: {
@@ -23,6 +24,7 @@ jest.mock("../../src/services/payout.service", () => ({
     getPayoutHistory: mockGetPayoutHistory,
     createPayoutRecord: mockCreatePayoutRecord,
     getPayoutSummary: mockGetPayoutSummary,
+    generatePayoutReport: mockGeneratePayoutReport,
   },
 }));
 
@@ -298,6 +300,138 @@ describe("Payout API", () => {
     it("returns 401 when no auth token is provided", async () => {
       const res = await request(app).get("/api/suppliers/me/payouts/summary");
       expect(res.status).toBe(401);
+    });
+  });
+
+  // =========================================================================
+  // GET /api/suppliers/me/payouts/report
+  // =========================================================================
+  describe("GET /api/suppliers/me/payouts/report", () => {
+    it("report contains correct period dates", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockGeneratePayoutReport.mockResolvedValue({
+        supplier: { id: SUPPLIER_ID, businessName: "MedSupply Co" },
+        period: { start: "2026-02-01", end: "2026-02-28" },
+        orders: [
+          {
+            orderNumber: "ORD-20260205-XYZ-1",
+            orderDate: "2026-02-05T10:00:00Z",
+            items: [
+              {
+                productName: "Surgical Gloves",
+                quantity: 5,
+                saleAmount: 50,
+                commissionRate: 15,
+                commissionAmount: 7.5,
+                supplierPayout: 42.5,
+              },
+            ],
+            orderTotal: 50,
+            orderCommission: 7.5,
+            orderPayout: 42.5,
+          },
+        ],
+        summary: { totalSales: 50, totalCommission: 7.5, totalPayout: 42.5, orderCount: 1 },
+      });
+
+      const res = await request(app)
+        .get("/api/suppliers/me/payouts/report?start=2026-02-01&end=2026-02-28")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(res.body.period.start).toBe("2026-02-01");
+      expect(res.body.period.end).toBe("2026-02-28");
+      expect(mockGeneratePayoutReport).toHaveBeenCalledWith(
+        SUPPLIER_ID,
+        "2026-02-01",
+        "2026-02-28",
+      );
+    });
+
+    it("report totals match sum of commission records", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockGeneratePayoutReport.mockResolvedValue({
+        supplier: { id: SUPPLIER_ID, businessName: "MedSupply Co" },
+        period: { start: "2026-01-01", end: "2026-01-31" },
+        orders: [
+          {
+            orderNumber: "ORD-001",
+            orderDate: "2026-01-10T00:00:00Z",
+            items: [
+              {
+                productName: "Gloves",
+                quantity: 10,
+                saleAmount: 100,
+                commissionRate: 15,
+                commissionAmount: 15,
+                supplierPayout: 85,
+              },
+              {
+                productName: "Masks",
+                quantity: 20,
+                saleAmount: 200,
+                commissionRate: 15,
+                commissionAmount: 30,
+                supplierPayout: 170,
+              },
+            ],
+            orderTotal: 300,
+            orderCommission: 45,
+            orderPayout: 255,
+          },
+        ],
+        summary: { totalSales: 300, totalCommission: 45, totalPayout: 255, orderCount: 1 },
+      });
+
+      const res = await request(app)
+        .get("/api/suppliers/me/payouts/report?start=2026-01-01&end=2026-01-31")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      // Verify totals match item sums
+      const order = res.body.orders[0];
+      const itemSaleSum = order.items.reduce(
+        (sum: number, i: { saleAmount: number }) => sum + i.saleAmount,
+        0,
+      );
+      const itemCommissionSum = order.items.reduce(
+        (sum: number, i: { commissionAmount: number }) => sum + i.commissionAmount,
+        0,
+      );
+      const itemPayoutSum = order.items.reduce(
+        (sum: number, i: { supplierPayout: number }) => sum + i.supplierPayout,
+        0,
+      );
+      expect(order.orderTotal).toBe(itemSaleSum);
+      expect(order.orderCommission).toBe(itemCommissionSum);
+      expect(order.orderPayout).toBe(itemPayoutSum);
+      expect(res.body.summary.totalSales).toBe(300);
+      expect(res.body.summary.totalCommission).toBe(45);
+      expect(res.body.summary.totalPayout).toBe(255);
+      expect(res.body.summary.orderCount).toBe(1);
+    });
+
+    it("empty period returns empty orders array (not error)", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockGeneratePayoutReport.mockResolvedValue({
+        supplier: { id: SUPPLIER_ID, businessName: "MedSupply Co" },
+        period: { start: "2020-01-01", end: "2020-01-31" },
+        orders: [],
+        summary: { totalSales: 0, totalCommission: 0, totalPayout: 0, orderCount: 0 },
+      });
+
+      const res = await request(app)
+        .get("/api/suppliers/me/payouts/report?start=2020-01-01&end=2020-01-31")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(res.body.orders).toHaveLength(0);
+      expect(res.body.summary.orderCount).toBe(0);
+      expect(res.body.summary.totalSales).toBe(0);
+      expect(res.body.summary.totalPayout).toBe(0);
     });
   });
 });

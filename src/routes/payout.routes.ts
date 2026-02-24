@@ -95,6 +95,47 @@ supplierPayoutRouter.get(
   PayoutController.getSummary,
 );
 
+/**
+ * @openapi
+ * /suppliers/me/payouts/report:
+ *   get:
+ *     summary: Generate payout report
+ *     description: Returns a structured payout report for a date range, with commissions grouped by order and line items.
+ *     tags: [Payouts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: start
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Period start date (ISO format)
+ *       - in: query
+ *         name: end
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Period end date (ISO format)
+ *     responses:
+ *       200:
+ *         description: Payout report with orders, items, and summary
+ *       400:
+ *         description: Missing start or end date
+ *       401:
+ *         description: Missing or invalid auth token
+ *       403:
+ *         description: Not a supplier or supplier not approved
+ */
+supplierPayoutRouter.get(
+  "/report",
+  authenticate,
+  authorize("supplier"),
+  PayoutController.generateReport,
+);
+
 // ---------------------------------------------------------------------------
 // Admin routes — mounted at /api/admin/payouts
 // ---------------------------------------------------------------------------

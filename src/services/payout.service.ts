@@ -207,6 +207,229 @@ export class PayoutService {
     return mapPayoutRow(payoutData as unknown as PayoutDbRow);
   }
 
+  static async generatePayoutReport(
+    supplierId: string,
+    periodStart: string,
+    periodEnd: string,
+  ): Promise<{
+    supplier: { id: string; businessName: string };
+    period: { start: string; end: string };
+    orders: Array<{
+      orderNumber: string;
+      orderDate: string;
+      items: Array<{
+        productName: string;
+        quantity: number;
+        saleAmount: number;
+        commissionRate: number;
+        commissionAmount: number;
+        supplierPayout: number;
+      }>;
+      orderTotal: number;
+      orderCommission: number;
+      orderPayout: number;
+    }>;
+    summary: {
+      totalSales: number;
+      totalCommission: number;
+      totalPayout: number;
+      orderCount: number;
+    };
+  }> {
+    // Fetch supplier info
+    const { data: supplierData, error: supplierError } = await supabaseAdmin
+      .from("suppliers")
+      .select("id, business_name")
+      .eq("id", supplierId)
+      .single();
+
+    if (supplierError || !supplierData) {
+      throw new Error(`Failed to fetch supplier: ${supplierError?.message}`);
+    }
+
+    const supplier = supplierData as unknown as { id: string; business_name: string };
+
+    // Fetch commissions in date range with joins
+    const { data: commissionsData, error: commissionsError } = await supabaseAdmin
+      .from("commissions")
+      .select(
+        "id, order_id, order_item_id, sale_amount, commission_rate, commission_amount, supplier_payout, created_at, order_items(quantity, products(name)), orders(order_number, created_at)",
+      )
+      .eq("supplier_id", supplierId)
+      .neq("status", "reversed")
+      .gte("created_at", periodStart)
+      .lte("created_at", periodEnd)
+      .order("created_at", { ascending: true });
+
+    if (commissionsError) {
+      throw new Error(`Failed to fetch commissions: ${commissionsError.message}`);
+    }
+
+    type ReportCommissionRow = {
+      id: string;
+      order_id: string;
+      order_item_id: string;
+      sale_amount: string;
+      commission_rate: string;
+      commission_amount: string;
+      supplier_payout: string;
+      created_at: string;
+      order_items: { quantity: number; products: { name: string } | null } | null;
+      orders: { order_number: string; created_at: string } | null;
+    };
+
+    const rows = (commissionsData ?? []) as unknown as ReportCommissionRow[];
+
+    // Group by order_id
+    const orderMap = new Map<
+      string,
+      {
+        orderNumber: string;
+        orderDate: string;
+        items: Array<{
+          productName: string;
+          quantity: number;
+          saleAmount: number;
+          commissionRate: number;
+          commissionAmount: number;
+          supplierPayout: number;
+        }>;
+        orderTotal: number;
+        orderCommission: number;
+        orderPayout: number;
+      }
+    >();
+
+    let totalSales = 0;
+    let totalCommission = 0;
+    let totalPayout = 0;
+
+    for (const row of rows) {
+      const saleAmount = Number(row.sale_amount);
+      const commissionAmount = Number(row.commission_amount);
+      const supplierPayout = Number(row.supplier_payout);
+
+      totalSales += saleAmount;
+      totalCommission += commissionAmount;
+      totalPayout += supplierPayout;
+
+      const existing = orderMap.get(row.order_id) ?? {
+        orderNumber: row.orders?.order_number ?? "Unknown",
+        orderDate: row.orders?.created_at ?? row.created_at,
+        items: [],
+        orderTotal: 0,
+        orderCommission: 0,
+        orderPayout: 0,
+      };
+
+      existing.items.push({
+        productName: row.order_items?.products?.name ?? "Unknown",
+        quantity: row.order_items?.quantity ?? 0,
+        saleAmount: Math.round(saleAmount * 100) / 100,
+        commissionRate: Number(row.commission_rate),
+        commissionAmount: Math.round(commissionAmount * 100) / 100,
+        supplierPayout: Math.round(supplierPayout * 100) / 100,
+      });
+
+      existing.orderTotal = Math.round((existing.orderTotal + saleAmount) * 100) / 100;
+      existing.orderCommission =
+        Math.round((existing.orderCommission + commissionAmount) * 100) / 100;
+      existing.orderPayout = Math.round((existing.orderPayout + supplierPayout) * 100) / 100;
+
+      orderMap.set(row.order_id, existing);
+    }
+
+    return {
+      supplier: { id: supplier.id, businessName: supplier.business_name },
+      period: { start: periodStart, end: periodEnd },
+      orders: [...orderMap.values()],
+      summary: {
+        totalSales: Math.round(totalSales * 100) / 100,
+        totalCommission: Math.round(totalCommission * 100) / 100,
+        totalPayout: Math.round(totalPayout * 100) / 100,
+        orderCount: orderMap.size,
+      },
+    };
+  }
+
+  static async getEarningsBreakdown(
+    supplierId: string,
+    month: number,
+    year: number,
+  ): Promise<{
+    dailyEarnings: Array<{ date: string; earnings: number; cumulative: number }>;
+    monthTotal: number;
+    previousMonthTotal: number;
+  }> {
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate = new Date(year, month, 1).toISOString();
+
+    // Current month commissions
+    const { data: currentData, error: currentError } = await supabaseAdmin
+      .from("commissions")
+      .select("supplier_payout, created_at")
+      .eq("supplier_id", supplierId)
+      .neq("status", "reversed")
+      .gte("created_at", startDate)
+      .lt("created_at", endDate)
+      .order("created_at", { ascending: true });
+
+    if (currentError) {
+      throw new Error(`Failed to fetch earnings: ${currentError.message}`);
+    }
+
+    type EarningRow = { supplier_payout: string; created_at: string };
+    const rows = (currentData ?? []) as unknown as EarningRow[];
+
+    // Group by day
+    const dayMap = new Map<string, number>();
+    let monthTotal = 0;
+
+    for (const row of rows) {
+      const day = new Date(row.created_at).toISOString().slice(0, 10);
+      const amount = Number(row.supplier_payout);
+      dayMap.set(day, (dayMap.get(day) ?? 0) + amount);
+      monthTotal += amount;
+    }
+
+    monthTotal = Math.round(monthTotal * 100) / 100;
+
+    // Build daily earnings with cumulative
+    let cumulative = 0;
+    const dailyEarnings = [...dayMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, earnings]) => {
+        const rounded = Math.round(earnings * 100) / 100;
+        cumulative = Math.round((cumulative + rounded) * 100) / 100;
+        return { date, earnings: rounded, cumulative };
+      });
+
+    // Previous month total
+    const prevStart = new Date(year, month - 2, 1).toISOString();
+    const prevEnd = startDate;
+
+    const { data: prevData, error: prevError } = await supabaseAdmin
+      .from("commissions")
+      .select("supplier_payout")
+      .eq("supplier_id", supplierId)
+      .neq("status", "reversed")
+      .gte("created_at", prevStart)
+      .lt("created_at", prevEnd);
+
+    if (prevError) {
+      throw new Error(`Failed to fetch previous month earnings: ${prevError.message}`);
+    }
+
+    const prevRows = (prevData ?? []) as unknown as EarningRow[];
+    let previousMonthTotal = 0;
+    for (const row of prevRows) {
+      previousMonthTotal += Number(row.supplier_payout);
+    }
+    previousMonthTotal = Math.round(previousMonthTotal * 100) / 100;
+
+    return { dailyEarnings, monthTotal, previousMonthTotal };
+  }
+
   static async getPayoutSummary(supplierId: string): Promise<PayoutSummary> {
     const now = new Date();
 

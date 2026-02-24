@@ -9,6 +9,11 @@ const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+const reportQuerySchema = z.object({
+  start: z.string().min(1, "Start date is required"),
+  end: z.string().min(1, "End date is required"),
+});
+
 const createPayoutSchema = z.object({
   supplierId: z.string().uuid("Invalid supplier ID"),
   amount: z.number().positive("Amount must be positive"),
@@ -42,6 +47,14 @@ export class PayoutController {
     const supplierId = await SupplierProductService.getSupplierIdFromUserId(req.user!.id);
     const summary = await PayoutService.getPayoutSummary(supplierId);
     res.status(200).json(summary);
+  }
+
+  /** GET /api/suppliers/me/payouts/report */
+  static async generateReport(req: Request, res: Response): Promise<void> {
+    const query = reportQuerySchema.parse(req.query);
+    const supplierId = await SupplierProductService.getSupplierIdFromUserId(req.user!.id);
+    const report = await PayoutService.generatePayoutReport(supplierId, query.start, query.end);
+    res.status(200).json(report);
   }
 
   /** POST /api/admin/payouts */
