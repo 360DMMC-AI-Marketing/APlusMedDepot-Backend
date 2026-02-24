@@ -12,8 +12,16 @@ export interface OrderItem {
   fulfillment_status: string;
   tracking_number?: string | null;
   carrier?: string | null;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
   product_image?: string | null;
   supplier_name?: string;
+}
+
+export interface OrderPayment {
+  status: string;
+  method: string | null;
+  paidAt: string | null;
 }
 
 export interface OrderSummary {
@@ -60,6 +68,7 @@ export interface Order {
   payment_intent_id: string | null;
   notes: string | null;
   items: OrderItem[];
+  payment?: OrderPayment | null;
   status_history?: OrderStatusHistory[];
   created_at: string;
   updated_at: string;
