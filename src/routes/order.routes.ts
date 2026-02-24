@@ -144,6 +144,38 @@ router.put("/:id/status", authenticate, authorize("admin"), OrderController.upda
 
 /**
  * @openapi
+ * /orders/{id}/confirmation:
+ *   get:
+ *     summary: Get order confirmation details after payment
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Order confirmation with items and totals
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — customer can only view own orders
+ *       404:
+ *         description: Order not found
+ */
+router.get(
+  "/:id/confirmation",
+  authenticate,
+  authorize("customer"),
+  OrderController.getConfirmation,
+);
+
+/**
+ * @openapi
  * /orders/{id}:
  *   get:
  *     summary: Get order details with items and status history
