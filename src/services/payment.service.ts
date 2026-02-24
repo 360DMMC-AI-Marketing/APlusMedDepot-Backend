@@ -1,9 +1,17 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { getStripe } from "../config/stripe";
 import { supabaseAdmin } from "../config/supabase";
 import { notFound, forbidden, conflict, badRequest } from "../utils/errors";
+import { incrementStock } from "../utils/inventory";
 import { onPaymentSuccess } from "./hooks/paymentHooks";
-import { sendOrderConfirmation } from "./email.service";
-import type { PaymentIntentResult, PaymentConfirmationResult } from "../types/payment.types";
+import { onPaymentRefunded } from "./hooks/paymentHooks";
+import { sendOrderConfirmation, sendOrderStatusUpdate } from "./email.service";
+import type {
+  PaymentIntentResult,
+  PaymentConfirmationResult,
+  RefundResult,
+} from "../types/payment.types";
 import type Stripe from "stripe";
 
 export class PaymentService {
@@ -159,5 +167,117 @@ export class PaymentService {
   static async getPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
     const stripe = getStripe();
     return stripe.paymentIntents.retrieve(paymentIntentId);
+  }
+
+  static async refundPayment(
+    orderId: string,
+    customerId: string,
+    reason?: string,
+  ): Promise<RefundResult> {
+    // 1. Fetch order and verify ownership
+    const { data: order, error } = await supabaseAdmin
+      .from("orders")
+      .select(
+        "id, customer_id, status, payment_status, payment_intent_id, total_amount, order_number",
+      )
+      .eq("id", orderId)
+      .single();
+
+    if (error || !order) {
+      throw notFound("Order");
+    }
+
+    if (order.customer_id !== customerId) {
+      throw forbidden();
+    }
+
+    // 2. Eligibility checks
+    if (order.payment_status !== "paid") {
+      throw conflict("Order payment status must be 'paid' to request a refund");
+    }
+
+    const NON_REFUNDABLE_STATUSES = ["shipped", "delivered", "cancelled"];
+    if (NON_REFUNDABLE_STATUSES.includes(order.status)) {
+      throw conflict(`Cannot refund an order with status '${order.status}'`);
+    }
+
+    if (!order.payment_intent_id) {
+      throw badRequest("No payment intent associated with this order");
+    }
+
+    // 3. Process Stripe refund — if this fails, nothing else happens
+    const stripe = getStripe();
+    const refund = await stripe.refunds.create({
+      payment_intent: order.payment_intent_id,
+      reason: "requested_by_customer",
+    });
+
+    // 4. Update order to cancelled / refunded
+    await supabaseAdmin
+      .from("orders")
+      .update({ payment_status: "refunded", status: "cancelled" })
+      .eq("id", orderId);
+
+    // 5. Restore inventory atomically
+    const { data: orderItems } = await supabaseAdmin
+      .from("order_items")
+      .select("product_id, quantity")
+      .eq("order_id", orderId);
+
+    type ItemRow = { product_id: string; quantity: number };
+    const itemRows = (orderItems ?? []) as unknown as ItemRow[];
+
+    if (itemRows.length > 0) {
+      const items = itemRows.map((item) => ({
+        productId: item.product_id,
+        quantity: item.quantity,
+      }));
+      await incrementStock(items, supabaseAdmin as unknown as SupabaseClient);
+    }
+
+    // 6. Call payment refunded hook
+    await onPaymentRefunded(orderId);
+
+    // 7. Insert payment record with negative amount
+    const amount = Number(order.total_amount);
+    await supabaseAdmin.from("payments").insert({
+      order_id: orderId,
+      stripe_payment_intent_id: order.payment_intent_id,
+      amount: -amount,
+      currency: "usd",
+      status: "refunded",
+      stripe_charge_id: refund.id,
+    });
+
+    // 8. Insert order_status_history
+    await supabaseAdmin.from("order_status_history").insert({
+      order_id: orderId,
+      from_status: order.status,
+      to_status: "cancelled",
+      changed_by: customerId,
+      reason: reason ?? "Customer requested refund",
+    });
+
+    // 9. Send cancellation email (fire-and-forget)
+    const { data: customer } = await supabaseAdmin
+      .from("users")
+      .select("email")
+      .eq("id", customerId)
+      .single();
+
+    if (customer?.email) {
+      sendOrderStatusUpdate(
+        { id: order.order_number ?? orderId },
+        customer.email,
+        "cancelled — refund issued",
+      );
+    }
+
+    // 10. Return result
+    return {
+      refundId: refund.id,
+      status: "refunded",
+      amount,
+    };
   }
 }

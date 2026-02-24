@@ -31,4 +31,19 @@ export class PaymentController {
     const result = await PaymentService.getPaymentStatus(orderId, req.user!.id);
     res.status(200).json(result);
   }
+
+  static async cancelOrder(req: Request, res: Response): Promise<void> {
+    const cancelSchema = z.object({
+      orderId: z.string().uuid(),
+      reason: z.string().max(500).optional(),
+    });
+
+    const validated = cancelSchema.parse(req.body);
+    const result = await PaymentService.refundPayment(
+      validated.orderId,
+      req.user!.id,
+      validated.reason,
+    );
+    res.status(200).json(result);
+  }
 }

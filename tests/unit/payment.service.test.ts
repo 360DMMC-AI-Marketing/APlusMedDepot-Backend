@@ -8,6 +8,7 @@ jest.mock("../../src/config/supabase", () => ({
 
 const mockPaymentIntentsCreate = jest.fn();
 const mockPaymentIntentsRetrieve = jest.fn();
+const mockRefundsCreate = jest.fn();
 
 jest.mock("../../src/config/stripe", () => ({
   getStripe: () => ({
@@ -15,17 +16,31 @@ jest.mock("../../src/config/stripe", () => ({
       create: mockPaymentIntentsCreate,
       retrieve: mockPaymentIntentsRetrieve,
     },
+    refunds: {
+      create: mockRefundsCreate,
+    },
   }),
 }));
 
 const mockOnPaymentSuccess = jest.fn().mockResolvedValue(undefined);
+const mockOnPaymentRefunded = jest.fn().mockResolvedValue(undefined);
 
 jest.mock("../../src/services/hooks/paymentHooks", () => ({
   onPaymentSuccess: mockOnPaymentSuccess,
+  onPaymentRefunded: mockOnPaymentRefunded,
 }));
+
+const mockSendOrderStatusUpdate = jest.fn();
 
 jest.mock("../../src/services/email.service", () => ({
   sendOrderConfirmation: jest.fn(),
+  sendOrderStatusUpdate: mockSendOrderStatusUpdate,
+}));
+
+const mockIncrementStock = jest.fn().mockResolvedValue(undefined);
+
+jest.mock("../../src/utils/inventory", () => ({
+  incrementStock: mockIncrementStock,
 }));
 
 import { PaymentService } from "../../src/services/payment.service";
@@ -487,6 +502,220 @@ describe("PaymentService", () => {
       await expect(PaymentService.getPaymentStatus(ORDER_ID, CUSTOMER_ID)).rejects.toMatchObject({
         statusCode: 403,
         code: "FORBIDDEN",
+      });
+    });
+  });
+
+  describe("refundPayment", () => {
+    const PI_ID = "pi_refund_123";
+    const REFUND_ID = "re_test_456";
+
+    function makeRefundOrder(overrides: Record<string, unknown> = {}) {
+      return {
+        id: ORDER_ID,
+        customer_id: CUSTOMER_ID,
+        status: "confirmed",
+        payment_status: "paid",
+        payment_intent_id: PI_ID,
+        total_amount: "64.93",
+        order_number: ORDER_NUMBER,
+        ...overrides,
+      };
+    }
+
+    function mockSelectListQuery(result: { data?: unknown; error?: unknown }) {
+      const resolved = {
+        data: result.data ?? null,
+        error: result.error ?? null,
+      };
+      const chain: Record<string, jest.Mock> = {};
+      const self = () => chain;
+      chain.select = jest.fn(self);
+      chain.eq = jest.fn(self);
+      chain.then = jest
+        .fn()
+        .mockImplementation((resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+          Promise.resolve(resolved).then(resolve, reject),
+        );
+      return chain;
+    }
+
+    function mockInsertQuery() {
+      const chain: Record<string, jest.Mock> = {};
+      chain.insert = jest.fn().mockResolvedValue({ data: null, error: null });
+      return chain;
+    }
+
+    function setupRefundHappyPath(orderOverrides: Record<string, unknown> = {}) {
+      const orderSelectChain = mockSelectQuery({ data: makeRefundOrder(orderOverrides) });
+      const orderUpdateChain = mockUpdateQuery();
+      const itemsSelectChain = mockSelectListQuery({
+        data: [
+          { product_id: "prod-1", quantity: 2 },
+          { product_id: "prod-2", quantity: 1 },
+        ],
+      });
+      const paymentsInsertChain = mockInsertQuery();
+      const historyInsertChain = mockInsertQuery();
+      const userSelectChain = mockSelectQuery({ data: { email: "cust@test.com" } });
+
+      let callCount = 0;
+      mockFrom.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return orderSelectChain; // orders select
+        if (callCount === 2) return orderUpdateChain; // orders update
+        if (callCount === 3) return itemsSelectChain; // order_items select
+        if (callCount === 4) return paymentsInsertChain; // payments insert
+        if (callCount === 5) return historyInsertChain; // order_status_history insert
+        return userSelectChain; // users select
+      });
+
+      mockRefundsCreate.mockResolvedValue({ id: REFUND_ID, status: "succeeded" });
+
+      return {
+        orderSelectChain,
+        orderUpdateChain,
+        itemsSelectChain,
+        paymentsInsertChain,
+        historyInsertChain,
+        userSelectChain,
+      };
+    }
+
+    it("returns refundId, status, and amount on success", async () => {
+      setupRefundHappyPath();
+
+      const result = await PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID, "Changed my mind");
+
+      expect(result).toEqual({
+        refundId: REFUND_ID,
+        status: "refunded",
+        amount: 64.93,
+      });
+
+      expect(mockRefundsCreate).toHaveBeenCalledWith({
+        payment_intent: PI_ID,
+        reason: "requested_by_customer",
+      });
+    });
+
+    it("throws NOT_FOUND when order does not exist", async () => {
+      const selectChain = mockSelectQuery({
+        data: null,
+        error: { message: "not found" },
+      });
+      mockFrom.mockReturnValue(selectChain);
+
+      await expect(PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID)).rejects.toMatchObject({
+        statusCode: 404,
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("throws FORBIDDEN when customer does not own the order", async () => {
+      const selectChain = mockSelectQuery({
+        data: makeRefundOrder({ customer_id: "other-customer" }),
+      });
+      mockFrom.mockReturnValue(selectChain);
+
+      await expect(PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID)).rejects.toMatchObject({
+        statusCode: 403,
+        code: "FORBIDDEN",
+      });
+    });
+
+    it("throws CONFLICT when payment_status is not paid", async () => {
+      const selectChain = mockSelectQuery({
+        data: makeRefundOrder({ payment_status: "processing" }),
+      });
+      mockFrom.mockReturnValue(selectChain);
+
+      await expect(PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID)).rejects.toMatchObject({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "Order payment status must be 'paid' to request a refund",
+      });
+    });
+
+    it("throws CONFLICT when order status is shipped", async () => {
+      const selectChain = mockSelectQuery({
+        data: makeRefundOrder({ status: "shipped" }),
+      });
+      mockFrom.mockReturnValue(selectChain);
+
+      await expect(PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID)).rejects.toMatchObject({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "Cannot refund an order with status 'shipped'",
+      });
+    });
+
+    it("does not update order when Stripe refund fails", async () => {
+      const selectChain = mockSelectQuery({ data: makeRefundOrder() });
+      mockFrom.mockReturnValue(selectChain);
+
+      mockRefundsCreate.mockRejectedValue(new Error("Stripe refund failed"));
+
+      await expect(PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID)).rejects.toThrow(
+        "Stripe refund failed",
+      );
+
+      // Only 1 from() call (the initial order select) — no update
+      expect(mockFrom).toHaveBeenCalledTimes(1);
+    });
+
+    it("inserts payment record with negative amount", async () => {
+      const { paymentsInsertChain } = setupRefundHappyPath();
+
+      await PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID);
+
+      expect(mockFrom).toHaveBeenNthCalledWith(4, "payments");
+      expect(paymentsInsertChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          order_id: ORDER_ID,
+          stripe_payment_intent_id: PI_ID,
+          amount: -64.93,
+          currency: "usd",
+          status: "refunded",
+          stripe_charge_id: REFUND_ID,
+        }),
+      );
+    });
+
+    it("calls incrementStock with order items", async () => {
+      setupRefundHappyPath();
+
+      await PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID);
+
+      expect(mockIncrementStock).toHaveBeenCalledWith(
+        [
+          { productId: "prod-1", quantity: 2 },
+          { productId: "prod-2", quantity: 1 },
+        ],
+        expect.anything(),
+      );
+    });
+
+    it("calls onPaymentRefunded hook", async () => {
+      setupRefundHappyPath();
+
+      await PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID);
+
+      expect(mockOnPaymentRefunded).toHaveBeenCalledWith(ORDER_ID);
+    });
+
+    it("inserts order_status_history record", async () => {
+      const { historyInsertChain } = setupRefundHappyPath();
+
+      await PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID, "Changed my mind");
+
+      expect(mockFrom).toHaveBeenNthCalledWith(5, "order_status_history");
+      expect(historyInsertChain.insert).toHaveBeenCalledWith({
+        order_id: ORDER_ID,
+        from_status: "confirmed",
+        to_status: "cancelled",
+        changed_by: CUSTOMER_ID,
+        reason: "Changed my mind",
       });
     });
   });
