@@ -22,6 +22,7 @@ import supplierProductRoutes from "./routes/supplierProduct.routes";
 import supplierInventoryRoutes from "./routes/supplierInventory.routes";
 import supplierAnalyticsRoutes from "./routes/supplierAnalytics.routes";
 import commissionRoutes from "./routes/commission.routes";
+import { supplierPayoutRouter, adminPayoutRouter } from "./routes/payout.routes";
 
 const app = express();
 
@@ -63,6 +64,8 @@ app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/suppliers", adminSupplierRoutes);
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/commissions", commissionRoutes);
+app.use("/api/suppliers/me/payouts", supplierPayoutRouter);
+app.use("/api/admin/payouts", adminPayoutRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
