@@ -666,7 +666,7 @@ describe("PaymentService", () => {
       expect(mockFrom).toHaveBeenCalledTimes(1);
     });
 
-    it("inserts payment record with negative amount", async () => {
+    it("logs refund payment event with negative amount", async () => {
       const { paymentsInsertChain } = setupRefundHappyPath();
 
       await PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID);
@@ -679,7 +679,6 @@ describe("PaymentService", () => {
           amount: -64.93,
           currency: "usd",
           status: "refunded",
-          stripe_charge_id: REFUND_ID,
         }),
       );
     });

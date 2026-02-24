@@ -230,6 +230,71 @@ router.get(
 
 /**
  * @openapi
+ * /payments/{orderId}/history:
+ *   get:
+ *     summary: Get full payment event history for an order
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Payment event history
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   orderId:
+ *                     type: string
+ *                   stripePaymentIntentId:
+ *                     type: string
+ *                   amount:
+ *                     type: number
+ *                   currency:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                   paymentMethod:
+ *                     type: string
+ *                     nullable: true
+ *                   failureReason:
+ *                     type: string
+ *                     nullable: true
+ *                   stripeEventId:
+ *                     type: string
+ *                     nullable: true
+ *                   paidAt:
+ *                     type: string
+ *                     nullable: true
+ *                   createdAt:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — customer can only view own order
+ *       404:
+ *         description: Order not found
+ */
+router.get(
+  "/:orderId/history",
+  authenticate,
+  authorize("customer", "admin"),
+  PaymentController.getPaymentHistory,
+);
+
+/**
+ * @openapi
  * /payments/refund:
  *   post:
  *     summary: Request a refund and cancel an order

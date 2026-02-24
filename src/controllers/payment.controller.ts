@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { z } from "zod";
 
 import { PaymentService } from "../services/payment.service";
+import { PaymentAuditService } from "../services/paymentAudit.service";
 
 const createPaymentIntentSchema = z.object({
   orderId: z.string().uuid(),
@@ -60,6 +61,19 @@ export class PaymentController {
   static async getPaymentAttempts(req: Request, res: Response): Promise<void> {
     const orderId = orderIdParamSchema.parse(req.params.orderId);
     const result = await PaymentService.getPaymentAttempts(orderId, req.user!.id);
+    res.status(200).json(result);
+  }
+
+  static async getPaymentHistory(req: Request, res: Response): Promise<void> {
+    const orderId = orderIdParamSchema.parse(req.params.orderId);
+    const user = req.user!;
+
+    // Customers can only view their own order's history
+    if (user.role === "customer") {
+      await PaymentService.getPaymentStatus(orderId, user.id);
+    }
+
+    const result = await PaymentAuditService.getPaymentHistory(orderId);
     res.status(200).json(result);
   }
 }

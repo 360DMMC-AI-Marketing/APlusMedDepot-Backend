@@ -7,6 +7,7 @@ import { incrementStock } from "../utils/inventory";
 import { onPaymentSuccess } from "./hooks/paymentHooks";
 import { onPaymentRefunded } from "./hooks/paymentHooks";
 import { sendOrderConfirmation, sendOrderStatusUpdate } from "./email.service";
+import { PaymentAuditService } from "./paymentAudit.service";
 import type {
   PaymentIntentResult,
   PaymentConfirmationResult,
@@ -239,15 +240,13 @@ export class PaymentService {
     // 6. Call payment refunded hook
     await onPaymentRefunded(orderId);
 
-    // 7. Insert payment record with negative amount
+    // 7. Log refund payment event
     const amount = Number(order.total_amount);
-    await supabaseAdmin.from("payments").insert({
-      order_id: orderId,
-      stripe_payment_intent_id: order.payment_intent_id,
+    await PaymentAuditService.logPaymentEvent({
+      orderId,
+      stripePaymentIntentId: order.payment_intent_id,
       amount: -amount,
-      currency: "usd",
       status: "refunded",
-      stripe_charge_id: refund.id,
     });
 
     // 8. Insert order_status_history
@@ -351,12 +350,11 @@ export class PaymentService {
       .update({ payment_intent_id: pi.id, payment_status: "processing" })
       .eq("id", orderId);
 
-    // 7. Insert payment attempt record
-    await supabaseAdmin.from("payments").insert({
-      order_id: orderId,
-      stripe_payment_intent_id: pi.id,
+    // 7. Log payment attempt
+    await PaymentAuditService.logPaymentEvent({
+      orderId,
+      stripePaymentIntentId: pi.id,
       amount: Number(order.total_amount),
-      currency: "usd",
       status: "initiated",
     });
 
