@@ -15,12 +15,20 @@ jest.mock("../../src/services/auth.service", () => ({
 const mockGetProductAnalytics = jest.fn();
 const mockGetAggregateAnalytics = jest.fn();
 const mockGetSupplierIdFromUserId = jest.fn();
+const mockGetDashboardStats = jest.fn();
+const mockGetTopProducts = jest.fn();
+const mockGetRevenueTrend = jest.fn();
+const mockGetOrderStatusBreakdown = jest.fn();
 
 jest.mock("../../src/services/supplierAnalytics.service", () => ({
   SupplierAnalyticsService: {
     getProductAnalytics: mockGetProductAnalytics,
     getAggregateAnalytics: mockGetAggregateAnalytics,
     getSupplierIdFromUserId: mockGetSupplierIdFromUserId,
+    getDashboardStats: mockGetDashboardStats,
+    getTopProducts: mockGetTopProducts,
+    getRevenueTrend: mockGetRevenueTrend,
+    getOrderStatusBreakdown: mockGetOrderStatusBreakdown,
   },
 }));
 
@@ -247,6 +255,123 @@ describe("Supplier Analytics API", () => {
         .set("Authorization", "Bearer valid-token");
 
       expect(res.status).toBe(403);
+    });
+  });
+
+  // =========================================================================
+  // GET /api/suppliers/analytics/dashboard
+  // =========================================================================
+  describe("GET /suppliers/analytics/dashboard", () => {
+    it("dashboard stats return correct structure with numeric values", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockGetDashboardStats.mockResolvedValue({
+        revenueThisMonth: 2500.0,
+        revenueLastMonth: 2000.0,
+        revenueChangePercent: 25,
+        ordersThisMonth: 15,
+        ordersLastMonth: 12,
+        averageOrderValue: 166.67,
+        activeProducts: 8,
+      });
+
+      const res = await request(app)
+        .get("/api/suppliers/analytics/dashboard")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(typeof res.body.revenueThisMonth).toBe("number");
+      expect(typeof res.body.revenueLastMonth).toBe("number");
+      expect(typeof res.body.revenueChangePercent).toBe("number");
+      expect(typeof res.body.ordersThisMonth).toBe("number");
+      expect(typeof res.body.ordersLastMonth).toBe("number");
+      expect(typeof res.body.averageOrderValue).toBe("number");
+      expect(typeof res.body.activeProducts).toBe("number");
+      expect(res.body.revenueThisMonth).toBe(2500);
+      expect(res.body.revenueChangePercent).toBe(25);
+      expect(res.body.activeProducts).toBe(8);
+    });
+  });
+
+  // =========================================================================
+  // GET /api/suppliers/analytics/top-products
+  // =========================================================================
+  describe("GET /suppliers/analytics/top-products", () => {
+    it("top products ordered by revenue DESC", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockGetTopProducts.mockResolvedValue([
+        { productId: PRODUCT_ID, name: "Surgical Gloves", totalSold: 50, totalRevenue: 1500 },
+        {
+          productId: "a0000000-0000-4000-8000-000000000002",
+          name: "Face Masks",
+          totalSold: 200,
+          totalRevenue: 800,
+        },
+      ]);
+
+      const res = await request(app)
+        .get("/api/suppliers/analytics/top-products")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(2);
+      // First product has higher revenue despite fewer units sold
+      expect(res.body[0].name).toBe("Surgical Gloves");
+      expect(res.body[0].totalRevenue).toBe(1500);
+      expect(res.body[1].name).toBe("Face Masks");
+      expect(res.body[1].totalRevenue).toBe(800);
+      expect(mockGetTopProducts).toHaveBeenCalledWith(SUPPLIER_ID, 5);
+    });
+  });
+
+  // =========================================================================
+  // GET /api/suppliers/analytics/revenue-trend
+  // =========================================================================
+  describe("GET /suppliers/analytics/revenue-trend", () => {
+    it("revenue trend returns data points for requested period", async () => {
+      authAs(supplierUser);
+      mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+      mockGetRevenueTrend.mockResolvedValue([
+        { date: "2025-06-01", revenue: 350.0, orderCount: 3 },
+        { date: "2025-06-02", revenue: 125.5, orderCount: 1 },
+        { date: "2025-06-03", revenue: 500.0, orderCount: 4 },
+      ]);
+
+      const res = await request(app)
+        .get("/api/suppliers/analytics/revenue-trend?period=week")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(3);
+      expect(res.body[0]).toHaveProperty("date");
+      expect(res.body[0]).toHaveProperty("revenue");
+      expect(res.body[0]).toHaveProperty("orderCount");
+      expect(typeof res.body[0].revenue).toBe("number");
+      expect(typeof res.body[0].orderCount).toBe("number");
+      expect(mockGetRevenueTrend).toHaveBeenCalledWith(SUPPLIER_ID, "week");
+    });
+  });
+
+  // =========================================================================
+  // Supplier-scoped access control
+  // =========================================================================
+  describe("Supplier-scoped access", () => {
+    it("supplier only sees their own analytics (filtered by supplier_id)", async () => {
+      authAs(customerUser);
+
+      const endpoints = [
+        "/api/suppliers/analytics/dashboard",
+        "/api/suppliers/analytics/top-products",
+        "/api/suppliers/analytics/revenue-trend",
+        "/api/suppliers/analytics/order-status",
+      ];
+
+      for (const url of endpoints) {
+        const res = await request(app).get(url).set("Authorization", "Bearer valid-token");
+
+        expect(res.status).toBe(403);
+      }
     });
   });
 });
