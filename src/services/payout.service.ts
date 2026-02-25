@@ -33,6 +33,12 @@ function mapPayoutRow(row: PayoutDbRow): PayoutRecord {
 }
 
 export class PayoutService {
+  /**
+   * Get a supplier's balance breakdown: current balance, pending commissions,
+   * total paid out, and amount available for payout ($50 minimum threshold).
+   * @param supplierId - The supplier UUID
+   * @returns Balance details with availability for payout
+   */
   static async getSupplierBalance(supplierId: string): Promise<SupplierBalance> {
     // 1. current_balance from suppliers table
     const { data: supplierData, error: supplierError } = await supabaseAdmin
@@ -98,6 +104,12 @@ export class PayoutService {
     };
   }
 
+  /**
+   * Get paginated payout history for a supplier, ordered by created_at DESC.
+   * @param supplierId - The supplier UUID
+   * @param options - Pagination: page (default 1), limit (default 20)
+   * @returns Paginated payout records with total count
+   */
   static async getPayoutHistory(
     supplierId: string,
     options?: { page?: number; limit?: number },
@@ -144,6 +156,13 @@ export class PayoutService {
     };
   }
 
+  /**
+   * Create a payout record and atomically deduct the amount from the supplier's balance.
+   * Throws 409 CONFLICT if the supplier's current_balance is less than the payout amount.
+   * @param supplierId - The supplier UUID
+   * @param input - Payout details: amount, periodStart, periodEnd, commissionTotal, itemsCount
+   * @returns The created payout record
+   */
   static async createPayoutRecord(
     supplierId: string,
     input: {
@@ -207,6 +226,15 @@ export class PayoutService {
     return mapPayoutRow(payoutData as unknown as PayoutDbRow);
   }
 
+  /**
+   * Generate a structured payout report for a date range.
+   * Fetches commissions (excluding reversed) within the period, groups by order,
+   * and returns per-order line items with commission breakdown and summary totals.
+   * @param supplierId - The supplier UUID
+   * @param periodStart - Start date (ISO string)
+   * @param periodEnd - End date (ISO string)
+   * @returns Report with supplier info, orders with items, and aggregated summary
+   */
   static async generatePayoutReport(
     supplierId: string,
     periodStart: string,
@@ -352,6 +380,14 @@ export class PayoutService {
     };
   }
 
+  /**
+   * Get daily earnings breakdown for a specific month with cumulative running totals
+   * and previous month comparison.
+   * @param supplierId - The supplier UUID
+   * @param month - Month number (1-12)
+   * @param year - Full year (e.g. 2026)
+   * @returns Daily earnings array with cumulative totals, month total, and previous month total
+   */
   static async getEarningsBreakdown(
     supplierId: string,
     month: number,
@@ -430,6 +466,12 @@ export class PayoutService {
     return { dailyEarnings, monthTotal, previousMonthTotal };
   }
 
+  /**
+   * Get payout summary: current/last month earnings, next payout date (15th of next month),
+   * and whether the supplier meets the $50 minimum payout threshold.
+   * @param supplierId - The supplier UUID
+   * @returns Summary with month-over-month earnings and threshold status
+   */
   static async getPayoutSummary(supplierId: string): Promise<PayoutSummary> {
     const now = new Date();
 

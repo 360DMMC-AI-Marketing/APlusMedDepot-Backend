@@ -4,7 +4,7 @@
 
 PostgreSQL database for a multi-vendor medical supplies marketplace. All tables use UUID primary keys with `gen_random_uuid()` and automatic `updated_at` timestamps via trigger.
 
-**Migration order:** 000 → 001 → 002 → ... → 019 (FK dependencies are satisfied sequentially).
+**Migration order:** 000 → 001 → 002 → ... → 021 (FK dependencies are satisfied sequentially).
 
 **Note:** `commission_rate` is stored as a percentage everywhere (15.00 = 15%), not a decimal fraction.
 
@@ -187,7 +187,7 @@ Master orders (customer-facing) and sub-orders (per supplier). Self-referencing 
 | tax_amount | DECIMAL(10,2) | NOT NULL, DEFAULT 0 |
 | shipping_address | JSONB | NOT NULL |
 | status | VARCHAR | NOT NULL, DEFAULT 'pending_payment', CHECK IN ('pending_payment', 'payment_processing', 'payment_confirmed', 'awaiting_fulfillment', 'partially_shipped', 'fully_shipped', 'delivered', 'cancelled', 'refunded') |
-| payment_status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'processing', 'succeeded', 'failed', 'refunded', 'partially_refunded') |
+| payment_status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'processing', 'paid', 'failed', 'refunded', 'partially_refunded') |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 
@@ -234,12 +234,17 @@ Stripe PaymentIntent records for orders.
 | stripe_payment_intent_id | VARCHAR | UNIQUE, NOT NULL |
 | amount | DECIMAL(10,2) | NOT NULL |
 | currency | VARCHAR | NOT NULL, DEFAULT 'usd' |
-| status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'processing', 'succeeded', 'failed', 'refunded', 'partially_refunded') |
+| status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'processing', 'paid', 'failed', 'refunded', 'partially_refunded') |
 | stripe_charge_id | VARCHAR | nullable |
 | failure_reason | TEXT | nullable |
 | metadata | JSONB | DEFAULT '{}' |
+| payment_method | VARCHAR(50) | nullable — e.g. 'card', 'bank_transfer' |
+| paid_at | TIMESTAMPTZ | nullable — when payment was confirmed |
+| stripe_event_id | VARCHAR | nullable — Stripe event ID for idempotency |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
+
+**Note:** `payment_status` CHECK was updated in migration 020 to use `'paid'` instead of legacy `'succeeded'`.
 
 **Trigger:** `set_payments_updated_at`
 
@@ -254,20 +259,23 @@ Per-line-item commission tracking. One commission entry per order_item.
 | id | UUID | PK, DEFAULT gen_random_uuid() |
 | order_item_id | UUID | UNIQUE, NOT NULL, FK → order_items(id) |
 | supplier_id | UUID | NOT NULL, FK → suppliers(id) |
+| order_id | UUID | FK → orders(id), nullable — links commission to its parent order *(added in 020)* |
 | sale_amount | DECIMAL(10,2) | NOT NULL |
 | commission_rate | NUMERIC(5,2) | NOT NULL, CHECK >= 0 AND <= 100 |
 | commission_amount | DECIMAL(10,2) | NOT NULL |
 | platform_amount | DECIMAL(10,2) | NOT NULL — same as commission_amount |
 | supplier_payout | DECIMAL(10,2) | NOT NULL |
 | supplier_amount | NUMERIC(12,2) | nullable — sale_amount minus commission_amount |
-| status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'confirmed', 'paid', 'cancelled') |
+| status | VARCHAR | NOT NULL, DEFAULT 'pending', CHECK IN ('pending', 'confirmed', 'paid', 'cancelled', 'reversed') |
 | confirmed_at | TIMESTAMPTZ | nullable — when commission is locked in (item shipped) |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() |
 
 **Calculation:** `commission_amount = sale_amount * (commission_rate / 100)`, `supplier_payout = sale_amount - commission_amount`
 
-**Note:** `commission_rate` is stored as percentage (15.00 = 15%). Column was renamed from `payout_status` to `status` in migration 013.
+**Note:** `commission_rate` is stored as percentage (15.00 = 15%). Column was renamed from `payout_status` to `status` in migration 013. Status `'reversed'` added in migration 021 for refund-triggered commission reversals.
+
+**`order_id` column:** Added in migration 020 to directly link commissions to orders, enabling efficient commission queries by order (used by `CommissionService.getCommissionsByOrder`).
 
 **Trigger:** `set_commissions_updated_at`
 
@@ -387,6 +395,7 @@ products 1──N order_items      (product_id)
 suppliers 1──N order_items     (supplier_id)
 orders 1──N payments           (order_id)
 order_items 1──1 commissions   (order_item_id, UNIQUE)
+orders 1──N commissions        (order_id)
 suppliers 1──N commissions     (supplier_id)
 suppliers 1──N payouts         (supplier_id)
 products 1──N stock_audit_log  (product_id, ON DELETE CASCADE)
@@ -556,6 +565,7 @@ All supplier_documents policies were created/recreated in migration 014.
 | `get_supplier_id()` | UUID | Returns the supplier.id for the current auth user |
 | `prevent_supplier_self_approval()` | TRIGGER | Prevents suppliers from changing status, commission_rate, approved_at, approved_by, current_balance |
 | `lock_products_for_update(product_ids UUID[])` | TABLE(id UUID, stock_quantity INTEGER) | SELECT ... FOR UPDATE with deterministic lock ordering to prevent deadlocks. Used by inventory management and checkout stock decrement. |
+| `increment_supplier_balance(p_supplier_id UUID, p_amount NUMERIC(12,2))` | VOID | Atomically adjusts `suppliers.current_balance`. Positive amount = credit (commission earned), negative = debit (payout or reversal). Uses `GREATEST(current_balance + p_amount, 0)` to prevent negative balances. Created in migration 021. |
 
 ---
 
@@ -581,3 +591,5 @@ All supplier_documents policies were created/recreated in migration 014.
 | 017_audit_rls_supplier_products.sql | Update products status CHECK constraint (pending/active/inactive/rejected/needs_revision), remove redundant products_supplier_delete policy, idempotently re-declare all product policies |
 | 018_supplier_inventory.sql | Add low_stock_threshold + last_restocked_at to products, create stock_audit_log table with RLS, create lock_products_for_update() function |
 | 019_product_approval_workflow.sql | Add reviewed_by, reviewed_at, admin_feedback to products, add idx_products_status_created index |
+| 020_sprint3_prep.sql | Add `payment_method`, `paid_at`, `stripe_event_id` to payments; add `order_id` (FK → orders) to commissions; fix `payment_status` CHECK to use 'paid' instead of 'succeeded' |
+| 021_commission_functions.sql | Add 'reversed' to commissions status CHECK constraint; create `increment_supplier_balance(p_supplier_id, p_amount)` RPC function with `GREATEST(0)` guard |
