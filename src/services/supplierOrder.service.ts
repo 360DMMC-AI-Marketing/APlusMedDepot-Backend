@@ -48,6 +48,13 @@ type StatusHistoryRow = {
 };
 
 export class SupplierOrderService {
+  /**
+   * List sub-orders for a supplier with pagination, status, and date filtering.
+   * Enriches each order with customer name, item count, and commission breakdown.
+   * @param supplierId - The supplier UUID
+   * @param options - Pagination (page, limit), status filter, date range (startDate, endDate)
+   * @returns Paginated list of supplier order views with total count
+   */
   static async getSupplierOrders(
     supplierId: string,
     options?: {
@@ -139,6 +146,14 @@ export class SupplierOrderService {
     return { data: views, total };
   }
 
+  /**
+   * Get full detail for a sub-order including items, commission breakdown,
+   * shipping address, and status history. Verifies supplier ownership.
+   * @param supplierId - The supplier UUID
+   * @param subOrderId - The sub-order UUID
+   * @returns Full order detail with items, history, and financials
+   * @throws 404 if order not found, 403 if order belongs to another supplier
+   */
   static async getSupplierOrderDetail(
     supplierId: string,
     subOrderId: string,
@@ -241,6 +256,12 @@ export class SupplierOrderService {
     };
   }
 
+  /**
+   * Get order statistics: this/last month order counts, revenue from commissions,
+   * average order value, and status breakdown (pending/processing/shipped/delivered).
+   * @param supplierId - The supplier UUID
+   * @returns Order stats with month-over-month counts and revenue
+   */
   static async getSupplierOrderStats(supplierId: string): Promise<SupplierOrderStats> {
     const now = new Date();
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -358,6 +379,16 @@ export class SupplierOrderService {
     };
   }
 
+  /**
+   * Update the fulfillment status of an order item.
+   * Validates state machine transitions (pending->processing->shipped->delivered),
+   * records tracking info on 'shipped', sends shipping notification email,
+   * and auto-updates master order status based on all items' fulfillment.
+   * @param supplierId - The supplier UUID (must own the item)
+   * @param orderItemId - The order item UUID
+   * @param data - New status plus optional trackingNumber and carrier (required for 'shipped')
+   * @throws 404 if item not found, 403 if wrong supplier, 409 if invalid transition
+   */
   static async updateItemFulfillment(
     supplierId: string,
     orderItemId: string,
@@ -497,6 +528,12 @@ export class SupplierOrderService {
     await this.checkAndUpdateMasterOrderStatus(item.order_id);
   }
 
+  /**
+   * Auto-update master order status based on all items' fulfillment statuses.
+   * Rules: all delivered -> 'delivered', all shipped/delivered -> 'fully_shipped',
+   * some shipped -> 'partially_shipped'. Inserts status history record.
+   * @param masterOrderId - The master order UUID to evaluate and update
+   */
   static async checkAndUpdateMasterOrderStatus(masterOrderId: string): Promise<void> {
     // Fetch ALL order items for this master order
     const { data: itemsData, error: itemsError } = await supabaseAdmin
@@ -575,6 +612,11 @@ export class SupplierOrderService {
     }
   }
 
+  /**
+   * Fetch a supplier's commission rate (percentage). Returns DEFAULT_COMMISSION_RATE (15) on error.
+   * @param supplierId - The supplier UUID
+   * @returns Commission rate as percentage (e.g. 15 for 15%)
+   */
   private static async getSupplierCommissionRate(supplierId: string): Promise<number> {
     const { data, error } = await supabaseAdmin
       .from("suppliers")

@@ -41,6 +41,14 @@ type ItemRow = {
   subtotal: string;
 };
 
+/**
+ * Split a master order into sub-orders grouped by supplier.
+ * Groups order_items by supplier_id, creates one sub-order per supplier with
+ * order number format `SUB-{masterNumber}-{index}`, and calculates per-sub-order
+ * tax at 8.25%. Failure to create a sub-order is non-fatal (logged, not thrown).
+ * @param masterOrderId - The master order UUID to split
+ * @returns Array of created sub-orders with items, amounts, and supplier info
+ */
 export async function splitOrderBySupplier(masterOrderId: string): Promise<SubOrder[]> {
   // a) Fetch master order
   const { data: masterData, error: masterError } = await supabaseAdmin
@@ -169,6 +177,11 @@ export async function splitOrderBySupplier(masterOrderId: string): Promise<SubOr
   return subOrders;
 }
 
+/**
+ * Fetch all sub-orders for a master order, enriched with items and supplier names.
+ * @param masterOrderId - The master order UUID
+ * @returns Array of sub-orders with their items and supplier details
+ */
 export async function getSubOrders(masterOrderId: string): Promise<SubOrder[]> {
   const { data: subOrdersData, error: subOrdersError } = await supabaseAdmin
     .from("orders")
@@ -234,6 +247,12 @@ export async function getSubOrders(masterOrderId: string): Promise<SubOrder[]> {
   return subOrders;
 }
 
+/**
+ * Fetch a single sub-order for a specific supplier within a master order.
+ * @param masterOrderId - The master order UUID
+ * @param supplierId - The supplier UUID
+ * @returns The sub-order with items and supplier name, or null if not found
+ */
 export async function getSupplierSubOrder(
   masterOrderId: string,
   supplierId: string,

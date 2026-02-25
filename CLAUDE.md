@@ -205,6 +205,50 @@ Never log or expose these. Use `dotenv` for local dev, AWS Secrets Manager for p
 ### Open TODO Stubs (Future Sprints)
 All placeholder TODO routes in `admin.ts`, `orders.ts`, `payments.ts`, `suppliers.ts`, `products.ts` are future work. The real implementations for orders and admin suppliers are in separate route files (`order.routes.ts`, `adminSuppliers.ts`, `adminProduct.routes.ts`).
 
+## Sprint 3 (Week 3) — Order Splitting, Commissions, Payouts & Fulfillment
+
+### New Services & Key Methods
+
+| Service | Methods | Description |
+|---------|---------|-------------|
+| `src/services/commission.service.ts` | `calculateOrderCommissions`, `reverseOrderCommissions`, `getCommissionsByOrder`, `getCommissionsBySupplier`, `getCommissionSummary` | Per-item commission calculation, reversal, and querying |
+| `src/services/orderSplitting.service.ts` | `splitOrderBySupplier`, `getSubOrders`, `getSupplierSubOrder` | Master order splitting into per-supplier sub-orders |
+| `src/services/payout.service.ts` | `getSupplierBalance`, `getPayoutHistory`, `createPayoutRecord`, `generatePayoutReport`, `getEarningsBreakdown`, `getPayoutSummary` | Supplier payout tracking, reporting, and balance management |
+| `src/services/supplierOrder.service.ts` | `getSupplierOrders`, `getSupplierOrderDetail`, `getSupplierOrderStats`, `updateItemFulfillment`, `checkAndUpdateMasterOrderStatus` | Supplier portal order views and fulfillment state machine |
+| `src/services/hooks/paymentHooks.ts` | `onPaymentSuccess`, `onPaymentRefunded` | Connects Stripe payment events to commission calculation/reversal |
+
+### New Routes
+
+| Route File | Mount Path | Endpoints |
+|------------|------------|-----------|
+| `src/routes/commission.routes.ts` | `/api/commissions` (supplier), `/api/commissions/order/:orderId` and `/api/commissions/supplier/:supplierId` (admin) | Supplier commission list/summary, admin order/supplier commission views |
+| `src/routes/payout.routes.ts` | `/api/suppliers/me/payouts` (supplier), `/api/admin/payouts` (admin) | Balance, history, summary, report (supplier); create payout (admin) |
+| `src/routes/supplierOrder.routes.ts` | `/api/suppliers/me/orders` | List, detail, stats, item fulfillment update |
+| `src/routes/supplierAnalytics.routes.ts` | `/api/suppliers/analytics` | Dashboard, top products, revenue trend, order status (4 new endpoints added to existing route file) |
+
+### Commission Flow Integration
+
+```
+Stripe webhook → payment_intent.succeeded → onPaymentSuccess(orderId) → CommissionService.calculateOrderCommissions(orderId)
+Stripe webhook → charge.refunded → onPaymentRefunded(orderId) → CommissionService.reverseOrderCommissions(orderId)
+```
+
+Commission hooks are in `src/services/hooks/paymentHooks.ts`. Failures are logged but do not block payment confirmation (fire-and-forget pattern).
+
+### Database Changes (Migrations 020–021)
+- **020:** Add `payment_method`, `paid_at`, `stripe_event_id` to payments; add `order_id` column to commissions; fix `payment_status` CHECK to use 'paid' instead of 'succeeded'
+- **021:** Add 'reversed' to commissions status constraint; create `increment_supplier_balance` RPC function (atomic UPDATE with GREATEST(0) guard against negative balances)
+
+### Key Patterns
+- **Commission rate as percentage:** `commission_rate = 15.00` means 15%. Service divides by 100: `rate = ratePercent / 100`
+- **Atomic balance updates:** All balance changes go through `increment_supplier_balance` RPC — never direct UPDATE
+- **Fulfillment state machine:** `pending → processing → shipped → delivered` (no backward transitions)
+- **Master order auto-status:** Derived from all items' fulfillment via `checkAndUpdateMasterOrderStatus()`
+- **Route registration order:** In `src/index.ts`, specific `/me/*` paths are registered before catch-all `/:id/*` routes
+
+### Handoff Documentation
+For comprehensive Dev 2 documentation including architecture, edge cases, and what not to touch → read `docs/DEV2_HANDOFF.md`
+
 ## When to Read Additional Docs
 NOTE: These docs are created as each feature is built during sprints. If a doc does not exist yet, it has not been built yet — proceed with the information in this file.
 
@@ -214,3 +258,4 @@ NOTE: These docs are created as each feature is built during sprints. If a doc d
 - For deployment, Docker, or AWS configuration → read `docs/DEPLOYMENT.md`
 - For full project requirements and scope → read `docs/SOW.md`
 - For RLS policy details per table → read `docs/RLS_POLICIES.md`
+- For Dev 2 handoff (architecture, edge cases, limitations) → read `docs/DEV2_HANDOFF.md`

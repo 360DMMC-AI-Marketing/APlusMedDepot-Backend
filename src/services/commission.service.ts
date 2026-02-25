@@ -27,6 +27,14 @@ type CommissionWithJoins = CommissionDbRow & {
 };
 
 export class CommissionService {
+  /**
+   * Calculate and record commissions for all items in an order.
+   * Fetches each item's supplier commission_rate (percentage, e.g. 15.00 = 15%),
+   * computes per-item commission, inserts commission records, and atomically
+   * increments each supplier's balance via `increment_supplier_balance` RPC.
+   * @param orderId - The order UUID whose items to process
+   * @returns Array of commission results with amounts per item
+   */
   static async calculateOrderCommissions(orderId: string): Promise<CommissionResult[]> {
     // Fetch order_items with supplier commission rates
     const { data: itemsData, error: itemsError } = await supabaseAdmin
@@ -152,6 +160,13 @@ export class CommissionService {
     return results;
   }
 
+  /**
+   * Reverse all non-reversed commissions for an order.
+   * Sets each commission status to 'reversed' and decrements supplier balances
+   * by the original supplier_payout amount. The RPC uses GREATEST(0) to prevent
+   * negative balances. Skips already-reversed commissions (idempotent).
+   * @param orderId - The order UUID whose commissions to reverse
+   */
   static async reverseOrderCommissions(orderId: string): Promise<void> {
     // Fetch non-reversed commissions for this order
     const { data: commissionsData, error: fetchError } = await supabaseAdmin
@@ -213,6 +228,12 @@ export class CommissionService {
     }
   }
 
+  /**
+   * Fetch all non-reversed commission records for a specific order,
+   * enriched with product names and supplier business names.
+   * @param orderId - The order UUID
+   * @returns Array of commission records with joined product/supplier info
+   */
   static async getCommissionsByOrder(orderId: string): Promise<CommissionRecord[]> {
     const { data, error } = await supabaseAdmin
       .from("commissions")
@@ -245,6 +266,12 @@ export class CommissionService {
     }));
   }
 
+  /**
+   * Fetch commission records for a supplier with optional date range and status filters.
+   * @param supplierId - The supplier UUID
+   * @param options - Optional filters: startDate, endDate (ISO strings), status
+   * @returns Array of commission records matching the filters
+   */
   static async getCommissionsBySupplier(
     supplierId: string,
     options?: { startDate?: string; endDate?: string; status?: string },
@@ -293,6 +320,13 @@ export class CommissionService {
     }));
   }
 
+  /**
+   * Aggregate commission totals for a supplier: total sales, total commission,
+   * total payout, distinct order count, and current balance from the suppliers table.
+   * Excludes reversed commissions.
+   * @param supplierId - The supplier UUID
+   * @returns Aggregated commission summary with current balance
+   */
   static async getCommissionSummary(supplierId: string): Promise<CommissionSummary> {
     // Fetch non-reversed commissions for aggregation
     const { data: commissionsData, error: commissionsError } = await supabaseAdmin
