@@ -19,9 +19,11 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "../../src/config/supabase";
 import env from "../../src/config/env";
 
-// Skip all tests if using test placeholder URL
+// Skip all tests if not explicitly running integration tests or using test placeholder URL
 const isTestPlaceholder =
-  env.SUPABASE_URL.includes("test.supabase.co") || env.SUPABASE_URL.includes("localhost");
+  process.env.NODE_ENV !== "integration" ||
+  env.SUPABASE_URL.includes("test.supabase.co") ||
+  env.SUPABASE_URL.includes("localhost");
 const describeOrSkip = isTestPlaceholder ? describe.skip : describe;
 
 // Notify if tests are being skipped
