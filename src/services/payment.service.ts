@@ -198,7 +198,12 @@ export class PaymentService {
       throw conflict("Order payment status must be 'paid' to request a refund");
     }
 
-    const NON_REFUNDABLE_STATUSES = ["shipped", "delivered", "cancelled"];
+    const NON_REFUNDABLE_STATUSES = [
+      "partially_shipped",
+      "fully_shipped",
+      "delivered",
+      "cancelled",
+    ];
     if (NON_REFUNDABLE_STATUSES.includes(order.status)) {
       throw conflict(`Cannot refund an order with status '${order.status}'`);
     }

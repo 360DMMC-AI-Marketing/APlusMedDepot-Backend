@@ -591,7 +591,7 @@ describe("Payment Flow Integration Tests", () => {
 
       const selectChain = mockSelectQuery({
         data: makeOrder({
-          status: "shipped",
+          status: "fully_shipped",
           payment_status: "paid",
           payment_intent_id: PI_ID,
         }),
