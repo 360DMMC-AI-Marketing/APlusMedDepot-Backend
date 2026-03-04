@@ -35,3 +35,19 @@ export function logSuspiciousActivity(type: string, details: Record<string, unkn
     }),
   );
 }
+
+export function logAdminAction(log: {
+  action: string;
+  adminId: string;
+  targetUserId: string;
+  reason?: string;
+  timestamp: string;
+}): void {
+  console.log(
+    JSON.stringify({
+      level: "info",
+      category: "admin_action",
+      ...log,
+    }),
+  );
+}

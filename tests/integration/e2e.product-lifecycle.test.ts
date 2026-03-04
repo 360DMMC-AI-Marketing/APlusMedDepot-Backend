@@ -297,7 +297,7 @@ describe("E2E Product Lifecycle", () => {
     expect(approveRes.status).toBe(200);
     expect(approveRes.body.status).toBe("active");
     expect(approveRes.body.reviewed_by).toBe(adminUser.id);
-    expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, adminUser.id);
+    expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, adminUser.id, expect.anything());
 
     // ---------------------------------------------------------------
     // STEP 4: Customer sees the product in the public catalog
