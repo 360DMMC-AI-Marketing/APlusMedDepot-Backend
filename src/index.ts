@@ -25,6 +25,7 @@ import commissionRoutes from "./routes/commission.routes";
 import { supplierPayoutRouter, adminPayoutRouter } from "./routes/payout.routes";
 import supplierOrderRoutes from "./routes/supplierOrder.routes";
 import adminUserRoutes from "./routes/adminUser.routes";
+import adminOrderRoutes from "./routes/adminOrder.routes";
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use("/api/suppliers/me/orders", supplierOrderRoutes);
 app.use("/api/suppliers/me/payouts", supplierPayoutRouter);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/admin/users", adminUserRoutes);
+app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/suppliers", adminSupplierRoutes);
 app.use("/api/admin/payouts", adminPayoutRouter);
