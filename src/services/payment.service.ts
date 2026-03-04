@@ -72,7 +72,7 @@ export class PaymentService {
     const { data: order, error } = await supabaseAdmin
       .from("orders")
       .select(
-        "id, customer_id, status, payment_intent_id, payment_status, total_amount, order_number, created_at, shipping_address, order_items(id, product_name, quantity, unit_price, subtotal, suppliers(business_name))",
+        "id, customer_id, status, payment_intent_id, payment_status, total_amount, order_number, created_at, shipping_address, order_items(id, quantity, unit_price, subtotal, product_id, supplier_id, products(name), suppliers(business_name))",
       )
       .eq("id", orderId)
       .single();
@@ -128,7 +128,7 @@ export class PaymentService {
             status: "payment_confirmed",
             total: Number(order.total_amount),
             items: items.map((item) => ({
-              name: item.product_name as string,
+              name: (item.products as { name?: string } | null)?.name ?? "Item",
               quantity: item.quantity as number,
               unitPrice: Number(item.unit_price),
               lineSubtotal: Number(item.subtotal),
@@ -198,7 +198,12 @@ export class PaymentService {
       throw conflict("Order payment status must be 'paid' to request a refund");
     }
 
-    const NON_REFUNDABLE_STATUSES = ["shipped", "delivered", "cancelled"];
+    const NON_REFUNDABLE_STATUSES = [
+      "partially_shipped",
+      "fully_shipped",
+      "delivered",
+      "cancelled",
+    ];
     if (NON_REFUNDABLE_STATUSES.includes(order.status)) {
       throw conflict(`Cannot refund an order with status '${order.status}'`);
     }

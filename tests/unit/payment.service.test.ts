@@ -187,7 +187,7 @@ describe("PaymentService", () => {
 
     it("throws CONFLICT when order is not pending_payment", async () => {
       const selectChain = mockSelectQuery({
-        data: makeOrder({ status: "shipped" }),
+        data: makeOrder({ status: "fully_shipped" }),
       });
       mockFrom.mockReturnValue(selectChain);
 
@@ -639,16 +639,16 @@ describe("PaymentService", () => {
       });
     });
 
-    it("throws CONFLICT when order status is shipped", async () => {
+    it("throws CONFLICT when order status is fully_shipped", async () => {
       const selectChain = mockSelectQuery({
-        data: makeRefundOrder({ status: "shipped" }),
+        data: makeRefundOrder({ status: "fully_shipped" }),
       });
       mockFrom.mockReturnValue(selectChain);
 
       await expect(PaymentService.refundPayment(ORDER_ID, CUSTOMER_ID)).rejects.toMatchObject({
         statusCode: 409,
         code: "CONFLICT",
-        message: "Cannot refund an order with status 'shipped'",
+        message: "Cannot refund an order with status 'fully_shipped'",
       });
     });
 
