@@ -6,7 +6,13 @@ import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 
 import { errorHandler } from "./middleware/errorHandler";
-import { apiLimiter } from "./middleware/rateLimiter";
+import {
+  globalLimiter,
+  authLimiter,
+  paymentLimiter,
+  webhookLimiter,
+  searchLimiter,
+} from "./middleware/rateLimiter";
 
 import authRoutes from "./routes/auth";
 import productRoutes from "./routes/products";
@@ -39,7 +45,13 @@ app.use(cors());
 // Raw body for Stripe webhook signature verification (must precede express.json)
 app.use("/api/payments/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
-app.use(apiLimiter);
+
+// Rate limiting — global first, then route-specific
+app.use(globalLimiter);
+app.use("/api/auth", authLimiter);
+app.use("/api/payments/webhook", webhookLimiter);
+app.use("/api/payments", paymentLimiter);
+app.use("/api/products/search", searchLimiter);
 
 // Swagger
 const swaggerSpec = swaggerJsdoc({
