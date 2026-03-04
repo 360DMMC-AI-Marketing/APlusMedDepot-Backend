@@ -10,7 +10,11 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize("admin"));
 
+router.get("/", AdminProductController.list);
+
 router.get("/pending", AdminProductController.listPending);
+
+router.get("/:id", AdminProductController.getDetail);
 
 router.get("/:id/review", AdminProductController.getReviewDetail);
 
@@ -19,5 +23,9 @@ router.put("/:id/approve", AdminProductController.approve);
 router.put("/:id/request-changes", AdminProductController.requestChanges);
 
 router.put("/:id/reject", AdminProductController.reject);
+
+router.put("/:id/feature", AdminProductController.feature);
+
+router.put("/:id/unfeature", AdminProductController.unfeature);
 
 export default router;

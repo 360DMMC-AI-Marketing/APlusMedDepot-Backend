@@ -146,3 +146,52 @@ export type PaymentRecord = {
 };
 
 export type OrderStatusCounts = Record<string, number>;
+
+// ── Admin Product Types ──────────────────────────────────────────────────
+
+export type AdminProductListItem = {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  stockQuantity: number;
+  category: string | null;
+  status: string;
+  supplierName: string;
+  supplierId: string;
+  isFeatured: boolean;
+  createdAt: string;
+};
+
+export type AdminProductDetail = {
+  id: string;
+  name: string;
+  description: string | null;
+  sku: string;
+  price: number;
+  stockQuantity: number;
+  category: string | null;
+  status: string;
+  images: string[] | null;
+  specifications: Record<string, string> | null;
+  weight: number | null;
+  dimensions: { length?: number; width?: number; height?: number } | null;
+  isFeatured: boolean;
+  isDeleted: boolean;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  adminFeedback: string | null;
+  supplier: {
+    id: string;
+    businessName: string;
+    status: string;
+    commissionRate: number;
+  };
+  salesStats: {
+    totalOrders: number;
+    totalSold: number;
+    totalRevenue: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+};

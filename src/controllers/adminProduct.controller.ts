@@ -10,12 +10,29 @@ const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+const listProductsSchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: z.enum(["pending", "active", "inactive", "rejected", "needs_revision"]).optional(),
+  supplierId: z.string().uuid().optional(),
+  category: z.string().optional(),
+  search: z.string().max(100).optional(),
+  sortBy: z.enum(["created_at", "name", "price", "status"]).optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
+});
+
 const requestChangesSchema = z.object({
-  feedback: z.string().min(10, "Feedback must be at least 10 characters"),
+  feedback: z
+    .string()
+    .min(10, "Feedback must be at least 10 characters")
+    .max(1000, "Feedback must not exceed 1000 characters"),
 });
 
 const rejectSchema = z.object({
-  reason: z.string().min(10, "Reason must be at least 10 characters"),
+  reason: z
+    .string()
+    .min(10, "Reason must be at least 10 characters")
+    .max(1000, "Reason must not exceed 1000 characters"),
 });
 
 export class AdminProductController {
@@ -49,5 +66,29 @@ export class AdminProductController {
     const { reason } = rejectSchema.parse(req.body);
     const result = await AdminProductService.reject(productId, req.user!.id, reason);
     res.status(200).json(result);
+  }
+
+  static async list(req: Request, res: Response): Promise<void> {
+    const options = listProductsSchema.parse(req.query);
+    const result = await AdminProductService.listProducts(options);
+    res.status(200).json(result);
+  }
+
+  static async getDetail(req: Request, res: Response): Promise<void> {
+    const productId = uuidSchema.parse(req.params.id);
+    const result = await AdminProductService.getProductDetail(productId);
+    res.status(200).json(result);
+  }
+
+  static async feature(req: Request, res: Response): Promise<void> {
+    const productId = uuidSchema.parse(req.params.id);
+    await AdminProductService.featureProduct(productId, req.user!.id);
+    res.status(200).json({ message: "Product featured successfully" });
+  }
+
+  static async unfeature(req: Request, res: Response): Promise<void> {
+    const productId = uuidSchema.parse(req.params.id);
+    await AdminProductService.unfeatureProduct(productId, req.user!.id);
+    res.status(200).json({ message: "Product unfeatured successfully" });
   }
 }

@@ -1,7 +1,13 @@
 import { supabaseAdmin } from "../config/supabase";
 import { sendEmail } from "./email.service";
 import { baseLayout, escapeHtml } from "../templates/baseLayout";
-import { AppError, notFound, badRequest } from "../utils/errors";
+import { AppError, notFound, badRequest, conflict } from "../utils/errors";
+import { logAdminAction } from "../utils/securityLogger";
+import type {
+  AdminProductListItem,
+  AdminProductDetail,
+  PaginatedResult,
+} from "../types/admin.types";
 
 interface ProductRow {
   id: string;
@@ -240,9 +246,13 @@ export class AdminProductService {
   static async approve(productId: string, adminUserId: string): Promise<ReviewedProduct> {
     const product = await this.getProductForReview(productId);
 
-    if (product.status !== "pending") {
+    if (
+      product.status !== "pending" &&
+      product.status !== "rejected" &&
+      product.status !== "needs_revision"
+    ) {
       throw badRequest(
-        `Cannot approve product with status '${product.status}'. Only pending products can be approved.`,
+        `Cannot approve product with status '${product.status}'. Only pending, rejected, or needs_revision products can be approved.`,
       );
     }
 
@@ -278,6 +288,13 @@ export class AdminProductService {
       });
       void sendEmail(supplierEmail, `Product Approved: ${product.name}`, html);
     }
+
+    logAdminAction({
+      action: "product_approved",
+      adminId: adminUserId,
+      targetUserId: product.supplier_id,
+      timestamp: now,
+    });
 
     const row = data as {
       id: string;
@@ -403,6 +420,14 @@ export class AdminProductService {
       void sendEmail(supplierEmail, `Product Rejected: ${product.name}`, html);
     }
 
+    logAdminAction({
+      action: "product_rejected",
+      adminId: adminUserId,
+      targetUserId: product.supplier_id,
+      reason,
+      timestamp: now,
+    });
+
     const row = data as {
       id: string;
       name: string;
@@ -412,6 +437,222 @@ export class AdminProductService {
       admin_feedback: string | null;
     };
     return row;
+  }
+
+  // ── New methods (Sprint 4 Task 3) ──────────────────────────────────────
+
+  static async listProducts(options?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    supplierId?: string;
+    category?: string;
+    search?: string;
+    sortBy?: "created_at" | "name" | "price" | "status";
+    sortOrder?: "asc" | "desc";
+  }): Promise<PaginatedResult<AdminProductListItem>> {
+    const page = options?.page ?? 1;
+    const limit = options?.limit ?? 20;
+    const sortBy = options?.sortBy ?? "created_at";
+    const sortOrder = options?.sortOrder ?? "desc";
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabaseAdmin
+      .from("products")
+      .select(
+        "id, name, sku, price, stock_quantity, category, status, supplier_id, is_featured, created_at, suppliers(business_name)",
+        { count: "exact" },
+      )
+      .eq("is_deleted", false);
+
+    if (options?.status) {
+      query = query.eq("status", options.status);
+    }
+    if (options?.supplierId) {
+      query = query.eq("supplier_id", options.supplierId);
+    }
+    if (options?.category) {
+      query = query.eq("category", options.category);
+    }
+    if (options?.search) {
+      query = query.or(
+        `name.ilike.%${options.search}%,sku.ilike.%${options.search}%,description.ilike.%${options.search}%`,
+      );
+    }
+
+    query = query.order(sortBy, { ascending: sortOrder === "asc" }).range(from, to);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw new Error(`Failed to list products: ${error.message}`);
+    }
+
+    type ProductListRow = {
+      id: string;
+      name: string;
+      sku: string;
+      price: string;
+      stock_quantity: number;
+      category: string | null;
+      status: string;
+      supplier_id: string;
+      is_featured: boolean;
+      created_at: string;
+      suppliers: { business_name: string } | null;
+    };
+
+    const rows = (data ?? []) as unknown as ProductListRow[];
+    const total = count ?? 0;
+
+    const items: AdminProductListItem[] = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      sku: row.sku,
+      price: Number(row.price),
+      stockQuantity: row.stock_quantity,
+      category: row.category,
+      status: row.status,
+      supplierName: row.suppliers?.business_name ?? "Unknown",
+      supplierId: row.supplier_id,
+      isFeatured: row.is_featured ?? false,
+      createdAt: row.created_at,
+    }));
+
+    return {
+      data: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  static async getProductDetail(productId: string): Promise<AdminProductDetail> {
+    const { data: productData, error: productError } = await supabaseAdmin
+      .from("products")
+      .select(PRODUCT_REVIEW_FIELDS + ", is_featured")
+      .eq("id", productId)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (productError) {
+      throw new AppError(productError.message, 500, "DATABASE_ERROR");
+    }
+    if (!productData) {
+      throw notFound("Product");
+    }
+
+    const product = productData as unknown as ProductRow & { is_featured: boolean };
+
+    // Fetch supplier info
+    const { data: supplierData } = await supabaseAdmin
+      .from("suppliers")
+      .select("id, business_name, status, commission_rate")
+      .eq("id", product.supplier_id)
+      .single();
+
+    const supplier = (supplierData as unknown as {
+      id: string;
+      business_name: string;
+      status: string;
+      commission_rate: string | null;
+    }) ?? {
+      id: product.supplier_id,
+      business_name: "Unknown",
+      status: "unknown",
+      commission_rate: null,
+    };
+
+    // Fetch sales stats
+    const { data: salesData } = await supabaseAdmin
+      .from("order_items")
+      .select("quantity, subtotal")
+      .eq("product_id", productId);
+
+    type SalesRow = { quantity: number; subtotal: string };
+    const salesRows = (salesData ?? []) as unknown as SalesRow[];
+
+    const salesStats = {
+      totalOrders: salesRows.length,
+      totalSold: salesRows.reduce((sum, r) => sum + r.quantity, 0),
+      totalRevenue:
+        Math.round(salesRows.reduce((sum, r) => sum + Number(r.subtotal), 0) * 100) / 100,
+    };
+
+    return {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      sku: product.sku,
+      price: Number(product.price),
+      stockQuantity: product.stock_quantity,
+      category: product.category,
+      status: product.status,
+      images: product.images,
+      specifications: product.specifications,
+      weight: product.weight !== null ? Number(product.weight) : null,
+      dimensions: product.dimensions,
+      isFeatured: product.is_featured ?? false,
+      isDeleted: product.is_deleted,
+      reviewedBy: product.reviewed_by,
+      reviewedAt: product.reviewed_at,
+      adminFeedback: product.admin_feedback,
+      supplier: {
+        id: supplier.id,
+        businessName: supplier.business_name,
+        status: supplier.status,
+        commissionRate: Number(supplier.commission_rate ?? 15),
+      },
+      salesStats,
+      createdAt: product.created_at,
+      updatedAt: product.updated_at,
+    };
+  }
+
+  static async featureProduct(productId: string, adminId: string): Promise<void> {
+    const product = await this.getProductForReview(productId);
+
+    if (product.status !== "active") {
+      throw conflict("Only active products can be featured");
+    }
+
+    const { error } = await supabaseAdmin
+      .from("products")
+      .update({ is_featured: true })
+      .eq("id", productId);
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    logAdminAction({
+      action: "product_featured",
+      adminId,
+      targetUserId: product.supplier_id,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static async unfeatureProduct(productId: string, adminId: string): Promise<void> {
+    const product = await this.getProductForReview(productId);
+
+    const { error } = await supabaseAdmin
+      .from("products")
+      .update({ is_featured: false })
+      .eq("id", productId);
+
+    if (error) {
+      throw new AppError(error.message, 500, "DATABASE_ERROR");
+    }
+
+    logAdminAction({
+      action: "product_unfeatured",
+      adminId,
+      targetUserId: product.supplier_id,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   // -----------------------------------------------------------------------
