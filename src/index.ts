@@ -36,6 +36,7 @@ import platformAnalyticsRoutes from "./routes/platformAnalytics.routes";
 import adminDashboardRoutes from "./routes/adminDashboard.routes";
 import commissionReportRoutes from "./routes/commissionReport.routes";
 import { notificationUserRouter, notificationAdminRouter } from "./routes/notification.routes";
+import auditLogRoutes from "./routes/auditLog.routes";
 
 const app = express();
 
@@ -89,6 +90,7 @@ app.use("/api/admin/analytics", platformAnalyticsRoutes);
 app.use("/api/admin/dashboard", adminDashboardRoutes);
 app.use("/api/admin/commissions", commissionReportRoutes);
 app.use("/api/admin/notifications", notificationAdminRouter);
+app.use("/api/admin/audit-logs", auditLogRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/notifications", notificationUserRouter);
 app.use("/api/checkout", checkoutRoutes);

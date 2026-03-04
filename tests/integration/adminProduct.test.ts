@@ -322,7 +322,7 @@ describe("Admin Product Approval API", () => {
       expect(res.body.reviewed_by).toBe(ADMIN_USER_ID);
       expect(res.body.reviewed_at).toBeDefined();
       expect(res.body.admin_feedback).toBeNull();
-      expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID);
+      expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID, expect.anything());
     });
 
     it("returns 400 when product is not in pending status", async () => {
@@ -377,6 +377,7 @@ describe("Admin Product Approval API", () => {
         PRODUCT_ID,
         ADMIN_USER_ID,
         "Please add clearer product images and update the description.",
+        expect.anything(),
       );
     });
 
@@ -456,6 +457,7 @@ describe("Admin Product Approval API", () => {
         PRODUCT_ID,
         ADMIN_USER_ID,
         "This product does not meet our quality standards for medical supplies.",
+        expect.anything(),
       );
     });
 
@@ -539,7 +541,7 @@ describe("Admin Product Approval API", () => {
 
       expect(res2.status).toBe(200);
       expect(res2.body.status).toBe("active");
-      expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID);
+      expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID, expect.anything());
     });
   });
 
@@ -716,7 +718,7 @@ describe("Admin Product Approval API", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe("Product featured successfully");
-      expect(mockFeatureProduct).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID);
+      expect(mockFeatureProduct).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID, expect.anything());
     });
 
     it("returns 409 when product is not active", async () => {
@@ -768,7 +770,11 @@ describe("Admin Product Approval API", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe("Product unfeatured successfully");
-      expect(mockUnfeatureProduct).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID);
+      expect(mockUnfeatureProduct).toHaveBeenCalledWith(
+        PRODUCT_ID,
+        ADMIN_USER_ID,
+        expect.anything(),
+      );
     });
 
     it("returns 404 for non-existent product", async () => {

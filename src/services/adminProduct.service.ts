@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../config/supabase";
 import { sendEmail } from "./email.service";
+import { AuditLogService } from "./auditLog.service";
 import { baseLayout, escapeHtml } from "../templates/baseLayout";
 import { AppError, notFound, badRequest, conflict } from "../utils/errors";
 import { logAdminAction } from "../utils/securityLogger";
@@ -8,6 +9,7 @@ import type {
   AdminProductDetail,
   PaginatedResult,
 } from "../types/admin.types";
+import type { AuditContext } from "../middleware/auditMiddleware";
 
 interface ProductRow {
   id: string;
@@ -243,7 +245,11 @@ export class AdminProductService {
   /**
    * PUT /api/admin/products/:id/approve
    */
-  static async approve(productId: string, adminUserId: string): Promise<ReviewedProduct> {
+  static async approve(
+    productId: string,
+    adminUserId: string,
+    auditCtx?: AuditContext,
+  ): Promise<ReviewedProduct> {
     const product = await this.getProductForReview(productId);
 
     if (
@@ -296,6 +302,16 @@ export class AdminProductService {
       timestamp: now,
     });
 
+    void AuditLogService.log({
+      adminId: adminUserId,
+      action: "product_approved",
+      resourceType: "product",
+      resourceId: productId,
+      details: { productName: product.name, previousStatus: product.status },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
+    });
+
     const row = data as {
       id: string;
       name: string;
@@ -314,6 +330,7 @@ export class AdminProductService {
     productId: string,
     adminUserId: string,
     feedback: string,
+    auditCtx?: AuditContext,
   ): Promise<ReviewedProduct> {
     const product = await this.getProductForReview(productId);
 
@@ -358,6 +375,16 @@ export class AdminProductService {
       void sendEmail(supplierEmail, `Changes Requested: ${product.name}`, html);
     }
 
+    void AuditLogService.log({
+      adminId: adminUserId,
+      action: "product_changes_requested",
+      resourceType: "product",
+      resourceId: productId,
+      details: { productName: product.name, feedback },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
+    });
+
     const row = data as {
       id: string;
       name: string;
@@ -376,6 +403,7 @@ export class AdminProductService {
     productId: string,
     adminUserId: string,
     reason: string,
+    auditCtx?: AuditContext,
   ): Promise<ReviewedProduct> {
     const product = await this.getProductForReview(productId);
 
@@ -426,6 +454,16 @@ export class AdminProductService {
       targetUserId: product.supplier_id,
       reason,
       timestamp: now,
+    });
+
+    void AuditLogService.log({
+      adminId: adminUserId,
+      action: "product_rejected",
+      resourceType: "product",
+      resourceId: productId,
+      details: { productName: product.name, reason },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
     });
 
     const row = data as {
@@ -611,7 +649,11 @@ export class AdminProductService {
     };
   }
 
-  static async featureProduct(productId: string, adminId: string): Promise<void> {
+  static async featureProduct(
+    productId: string,
+    adminId: string,
+    auditCtx?: AuditContext,
+  ): Promise<void> {
     const product = await this.getProductForReview(productId);
 
     if (product.status !== "active") {
@@ -633,9 +675,23 @@ export class AdminProductService {
       targetUserId: product.supplier_id,
       timestamp: new Date().toISOString(),
     });
+
+    void AuditLogService.log({
+      adminId,
+      action: "product_featured",
+      resourceType: "product",
+      resourceId: productId,
+      details: { productName: product.name },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
+    });
   }
 
-  static async unfeatureProduct(productId: string, adminId: string): Promise<void> {
+  static async unfeatureProduct(
+    productId: string,
+    adminId: string,
+    auditCtx?: AuditContext,
+  ): Promise<void> {
     const product = await this.getProductForReview(productId);
 
     const { error } = await supabaseAdmin
@@ -652,6 +708,16 @@ export class AdminProductService {
       adminId,
       targetUserId: product.supplier_id,
       timestamp: new Date().toISOString(),
+    });
+
+    void AuditLogService.log({
+      adminId,
+      action: "product_unfeatured",
+      resourceType: "product",
+      resourceId: productId,
+      details: { productName: product.name },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
     });
   }
 

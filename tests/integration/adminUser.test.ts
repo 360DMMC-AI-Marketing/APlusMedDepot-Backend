@@ -276,7 +276,7 @@ describe("Admin User Management API", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe("User approved successfully");
-      expect(mockApproveUser).toHaveBeenCalledWith(USER_ID, ADMIN_USER_ID);
+      expect(mockApproveUser).toHaveBeenCalledWith(USER_ID, ADMIN_USER_ID, expect.anything());
     });
 
     it("returns 409 when user is not pending", async () => {
@@ -312,6 +312,7 @@ describe("Admin User Management API", () => {
         USER_ID,
         ADMIN_USER_ID,
         "Invalid documentation submitted",
+        expect.anything(),
       );
     });
 
@@ -368,6 +369,7 @@ describe("Admin User Management API", () => {
         USER_ID,
         ADMIN_USER_ID,
         "Violation of terms of service",
+        expect.anything(),
       );
     });
 
@@ -425,7 +427,7 @@ describe("Admin User Management API", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe("User reactivated successfully");
-      expect(mockReactivateUser).toHaveBeenCalledWith(USER_ID, ADMIN_USER_ID);
+      expect(mockReactivateUser).toHaveBeenCalledWith(USER_ID, ADMIN_USER_ID, expect.anything());
     });
 
     it("returns 409 when user is not suspended", async () => {

@@ -50,21 +50,31 @@ export class AdminProductController {
 
   static async approve(req: Request, res: Response): Promise<void> {
     const productId = uuidSchema.parse(req.params.id);
-    const result = await AdminProductService.approve(productId, req.user!.id);
+    const result = await AdminProductService.approve(productId, req.user!.id, req.auditContext);
     res.status(200).json(result);
   }
 
   static async requestChanges(req: Request, res: Response): Promise<void> {
     const productId = uuidSchema.parse(req.params.id);
     const { feedback } = requestChangesSchema.parse(req.body);
-    const result = await AdminProductService.requestChanges(productId, req.user!.id, feedback);
+    const result = await AdminProductService.requestChanges(
+      productId,
+      req.user!.id,
+      feedback,
+      req.auditContext,
+    );
     res.status(200).json(result);
   }
 
   static async reject(req: Request, res: Response): Promise<void> {
     const productId = uuidSchema.parse(req.params.id);
     const { reason } = rejectSchema.parse(req.body);
-    const result = await AdminProductService.reject(productId, req.user!.id, reason);
+    const result = await AdminProductService.reject(
+      productId,
+      req.user!.id,
+      reason,
+      req.auditContext,
+    );
     res.status(200).json(result);
   }
 
@@ -82,13 +92,13 @@ export class AdminProductController {
 
   static async feature(req: Request, res: Response): Promise<void> {
     const productId = uuidSchema.parse(req.params.id);
-    await AdminProductService.featureProduct(productId, req.user!.id);
+    await AdminProductService.featureProduct(productId, req.user!.id, req.auditContext);
     res.status(200).json({ message: "Product featured successfully" });
   }
 
   static async unfeature(req: Request, res: Response): Promise<void> {
     const productId = uuidSchema.parse(req.params.id);
-    await AdminProductService.unfeatureProduct(productId, req.user!.id);
+    await AdminProductService.unfeatureProduct(productId, req.user!.id, req.auditContext);
     res.status(200).json({ message: "Product unfeatured successfully" });
   }
 }

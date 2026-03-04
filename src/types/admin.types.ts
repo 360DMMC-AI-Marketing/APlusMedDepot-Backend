@@ -345,3 +345,46 @@ export type NotificationRecord = {
   emailSent: boolean;
   createdAt: string;
 };
+
+// ── Audit Log Types ───────────────────────────────────────────────────
+
+export const AUDIT_ACTIONS = {
+  USER_APPROVED: "user_approved",
+  USER_REJECTED: "user_rejected",
+  USER_SUSPENDED: "user_suspended",
+  USER_REACTIVATED: "user_reactivated",
+  PRODUCT_APPROVED: "product_approved",
+  PRODUCT_REJECTED: "product_rejected",
+  PRODUCT_FEATURED: "product_featured",
+  PRODUCT_UNFEATURED: "product_unfeatured",
+  PRODUCT_CHANGES_REQUESTED: "product_changes_requested",
+  ORDER_STATUS_UPDATED: "order_status_updated",
+  PAYOUT_CREATED: "payout_created",
+  NOTIFICATION_SENT: "notification_sent",
+  SETTINGS_UPDATED: "settings_updated",
+} as const;
+
+export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
+
+export type AuditLogEntry = {
+  adminId: string;
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  details?: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+};
+
+export type AuditLogRecord = {
+  id: string;
+  adminId: string;
+  adminEmail: string;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  details: Record<string, unknown>;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+};

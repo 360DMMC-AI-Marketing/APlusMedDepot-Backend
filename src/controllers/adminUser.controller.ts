@@ -37,27 +37,27 @@ export class AdminUserController {
 
   static async approve(req: Request, res: Response): Promise<void> {
     const userId = uuidSchema.parse(req.params.id);
-    await AdminUserService.approveUser(userId, req.user!.id);
+    await AdminUserService.approveUser(userId, req.user!.id, req.auditContext);
     res.status(200).json({ message: "User approved successfully" });
   }
 
   static async reject(req: Request, res: Response): Promise<void> {
     const userId = uuidSchema.parse(req.params.id);
     const { reason } = reasonSchema.parse(req.body);
-    await AdminUserService.rejectUser(userId, req.user!.id, reason);
+    await AdminUserService.rejectUser(userId, req.user!.id, reason, req.auditContext);
     res.status(200).json({ message: "User rejected successfully" });
   }
 
   static async suspend(req: Request, res: Response): Promise<void> {
     const userId = uuidSchema.parse(req.params.id);
     const { reason } = reasonSchema.parse(req.body);
-    await AdminUserService.suspendUser(userId, req.user!.id, reason);
+    await AdminUserService.suspendUser(userId, req.user!.id, reason, req.auditContext);
     res.status(200).json({ message: "User suspended successfully" });
   }
 
   static async reactivate(req: Request, res: Response): Promise<void> {
     const userId = uuidSchema.parse(req.params.id);
-    await AdminUserService.reactivateUser(userId, req.user!.id);
+    await AdminUserService.reactivateUser(userId, req.user!.id, req.auditContext);
     res.status(200).json({ message: "User reactivated successfully" });
   }
 

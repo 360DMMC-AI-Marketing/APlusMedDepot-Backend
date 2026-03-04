@@ -2,6 +2,7 @@ import { supabaseAdmin } from "../config/supabase";
 import { conflict, forbidden, notFound } from "../utils/errors";
 import { logAdminAction } from "../utils/securityLogger";
 import { sendEmail } from "./email.service";
+import { AuditLogService } from "./auditLog.service";
 import { baseLayout, escapeHtml } from "../templates/baseLayout";
 import type {
   UserListItem,
@@ -10,6 +11,7 @@ import type {
   UserRole,
   PaginatedResult,
 } from "../types/admin.types";
+import type { AuditContext } from "../middleware/auditMiddleware";
 
 type UserRow = {
   id: string;
@@ -152,7 +154,11 @@ export class AdminUserService {
     return detail;
   }
 
-  static async approveUser(userId: string, adminId: string): Promise<void> {
+  static async approveUser(
+    userId: string,
+    adminId: string,
+    auditCtx?: AuditContext,
+  ): Promise<void> {
     const user = await this.fetchUserOrThrow(userId);
 
     if (user.status !== "pending") {
@@ -191,9 +197,24 @@ export class AdminUserService {
       targetUserId: userId,
       timestamp: new Date().toISOString(),
     });
+
+    void AuditLogService.log({
+      adminId,
+      action: "user_approved",
+      resourceType: "user",
+      resourceId: userId,
+      details: { role: user.role },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
+    });
   }
 
-  static async rejectUser(userId: string, adminId: string, reason: string): Promise<void> {
+  static async rejectUser(
+    userId: string,
+    adminId: string,
+    reason: string,
+    auditCtx?: AuditContext,
+  ): Promise<void> {
     const user = await this.fetchUserOrThrow(userId);
 
     if (user.status !== "pending") {
@@ -234,9 +255,24 @@ export class AdminUserService {
       reason,
       timestamp: new Date().toISOString(),
     });
+
+    void AuditLogService.log({
+      adminId,
+      action: "user_rejected",
+      resourceType: "user",
+      resourceId: userId,
+      details: { reason, role: user.role },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
+    });
   }
 
-  static async suspendUser(userId: string, adminId: string, reason: string): Promise<void> {
+  static async suspendUser(
+    userId: string,
+    adminId: string,
+    reason: string,
+    auditCtx?: AuditContext,
+  ): Promise<void> {
     const user = await this.fetchUserOrThrow(userId);
 
     if (user.status !== "approved") {
@@ -281,9 +317,23 @@ export class AdminUserService {
       reason,
       timestamp: new Date().toISOString(),
     });
+
+    void AuditLogService.log({
+      adminId,
+      action: "user_suspended",
+      resourceType: "user",
+      resourceId: userId,
+      details: { reason, role: user.role },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
+    });
   }
 
-  static async reactivateUser(userId: string, adminId: string): Promise<void> {
+  static async reactivateUser(
+    userId: string,
+    adminId: string,
+    auditCtx?: AuditContext,
+  ): Promise<void> {
     const user = await this.fetchUserOrThrow(userId);
 
     if (user.status !== "suspended") {
@@ -320,6 +370,16 @@ export class AdminUserService {
       adminId,
       targetUserId: userId,
       timestamp: new Date().toISOString(),
+    });
+
+    void AuditLogService.log({
+      adminId,
+      action: "user_reactivated",
+      resourceType: "user",
+      resourceId: userId,
+      details: { role: user.role },
+      ipAddress: auditCtx?.ipAddress,
+      userAgent: auditCtx?.userAgent,
     });
   }
 
