@@ -195,3 +195,153 @@ export type AdminProductDetail = {
   createdAt: string;
   updatedAt: string;
 };
+
+// ── Platform Analytics Types ────────────────────────────────────────────
+
+export type RevenueMetrics = {
+  totalSales: number;
+  totalCommission: number;
+  totalSupplierPayouts: number;
+  netPlatformRevenue: number;
+  orderCount: number;
+};
+
+export type RevenueComparison = {
+  current: RevenueMetrics;
+  previous: RevenueMetrics;
+  changePercent: {
+    sales: number;
+    commission: number;
+    orders: number;
+  };
+};
+
+export type SupplierRevenue = {
+  supplierId: string;
+  supplierName: string;
+  totalSales: number;
+  platformCommission: number;
+  supplierPayout: number;
+  orderCount: number;
+};
+
+export type CategoryRevenue = {
+  category: string;
+  totalSales: number;
+  orderCount: number;
+  unitsSold: number;
+};
+
+export type TrendDataPoint = {
+  date: string;
+  revenue: number;
+  commission: number;
+  orders: number;
+};
+
+export type OrderMetrics = {
+  totalOrders: number;
+  paidOrders: number;
+  cancelledOrders: number;
+  averageOrderValue: number;
+  conversionRate: number;
+};
+
+export type TopProduct = {
+  productId: string;
+  productName: string;
+  category: string;
+  supplierName: string;
+  totalSold: number;
+  totalRevenue: number;
+};
+
+// ── Admin Dashboard Types ───────────────────────────────────────────────
+
+export type DashboardSummary = {
+  pendingActions: {
+    users: number;
+    suppliers: number;
+    products: number;
+    total: number;
+  };
+  revenue: {
+    thisMonth: number;
+    lastMonth: number;
+    changePercent: number;
+  };
+  orders: {
+    thisMonth: number;
+    averageValue: number;
+    byStatus: Record<string, number>;
+  };
+  recentOrders: AdminOrderListItem[];
+  platformHealth: {
+    activeUsers: number;
+    activeSuppliers: number;
+    activeProducts: number;
+  };
+};
+
+// ── Commission Report Types ─────────────────────────────────────────────
+
+export type PlatformEarnings = {
+  totalGrossSales: number;
+  totalPlatformCommission: number;
+  totalSupplierPayouts: number;
+  commissionCount: number;
+  averageCommissionRate: number;
+  trend: CommissionTrendPoint[];
+};
+
+export type SupplierCommissionReport = {
+  supplierId: string;
+  supplierName: string;
+  totalSales: number;
+  totalCommission: number;
+  totalOwed: number;
+  currentBalance: number;
+  commissionRate: number;
+  orderCount: number;
+};
+
+export type CommissionTrendPoint = {
+  date: string;
+  grossSales: number;
+  platformCommission: number;
+  supplierPayout: number;
+  orderCount: number;
+};
+
+// ── Notification Types ──────────────────────────────────────────────────
+
+export type NotificationType =
+  | "order_confirmed"
+  | "order_shipped"
+  | "order_delivered"
+  | "order_cancelled"
+  | "payment_received"
+  | "payment_failed"
+  | "refund_processed"
+  | "product_approved"
+  | "product_rejected"
+  | "product_changes_requested"
+  | "account_approved"
+  | "account_rejected"
+  | "account_suspended"
+  | "payout_processed"
+  | "new_supplier_order"
+  | "system_announcement"
+  | "admin_message";
+
+export type NotificationRecord = {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  data: Record<string, unknown>;
+  read: boolean;
+  emailSent: boolean;
+  createdAt: string;
+};
