@@ -82,7 +82,7 @@ export class CheckoutService {
         status: string;
         is_deleted: boolean;
         supplier_id: string;
-        suppliers: { business_name: string };
+        suppliers: { business_name: string } | null;
       }
     >();
 
@@ -94,7 +94,7 @@ export class CheckoutService {
       status: string;
       is_deleted: boolean;
       supplier_id: string;
-      suppliers: { business_name: string };
+      suppliers: { business_name: string } | null;
     }[]) {
       productMap.set(p.id, p);
     }
@@ -133,7 +133,7 @@ export class CheckoutService {
         product_id: product.id,
         product_name: product.name,
         supplier_id: product.supplier_id,
-        supplier_name: product.suppliers.business_name,
+        supplier_name: product.suppliers?.business_name ?? "Unknown",
         quantity: item.quantity,
         current_price: currentPrice,
         subtotal,
