@@ -1250,3 +1250,280 @@ ALTER TABLE commissions ADD COLUMN IF NOT EXISTS order_id UUID REFERENCES orders
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_status_check;
 ALTER TABLE orders ADD CONSTRAINT orders_payment_status_check
   CHECK (payment_status IN ('pending','processing','paid','failed','refunded','partially_refunded'));
+
+-- ============================================
+-- MIGRATION: 021_commission_functions.sql
+-- ============================================
+-- 021_commission_functions.sql
+-- Add 'reversed' status to commissions and create atomic balance update function
+
+-- 1. Extend commissions status constraint to include 'reversed'
+ALTER TABLE commissions DROP CONSTRAINT IF EXISTS commissions_status_check;
+ALTER TABLE commissions ADD CONSTRAINT commissions_status_check
+  CHECK (status IN ('pending', 'confirmed', 'paid', 'cancelled', 'reversed'));
+
+-- 2. Atomic supplier balance increment/decrement function
+--    Positive amount = credit (commission earned)
+--    Negative amount = debit (commission reversed)
+--    GREATEST prevents balance going below 0
+CREATE OR REPLACE FUNCTION increment_supplier_balance(
+  p_supplier_id UUID,
+  p_amount NUMERIC(12,2)
+) RETURNS NUMERIC(12,2) AS $$
+DECLARE
+  new_balance NUMERIC(12,2);
+BEGIN
+  UPDATE suppliers
+  SET current_balance = GREATEST(current_balance + p_amount, 0)
+  WHERE id = p_supplier_id
+  RETURNING current_balance INTO new_balance;
+  RETURN new_balance;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- MIGRATION: 022_add_rejected_user_status.sql
+-- ============================================
+-- ============================================
+-- Migration 022: Add 'rejected' to users status constraint
+-- ============================================
+-- Extend users.status CHECK to include 'rejected' for admin user management.
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check;
+ALTER TABLE users
+  ADD CONSTRAINT users_status_check
+  CHECK (status IN ('pending', 'approved', 'suspended', 'rejected'));
+
+-- ============================================
+-- MIGRATION: 023_admin_product_fields.sql
+-- ============================================
+-- ============================================================
+-- Migration 023: Admin Product Fields
+-- ============================================================
+-- Adds is_featured column and indexes for admin product management.
+-- ============================================================
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS idx_products_is_featured ON products(is_featured) WHERE is_featured = true;
+CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
+
+-- ============================================
+-- MIGRATION: 024_create_notifications.sql
+-- ============================================
+-- ============================================================
+-- Migration 024: Create Notifications Table
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  data JSONB DEFAULT '{}',
+  read BOOLEAN DEFAULT false,
+  email_sent BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, read) WHERE read = false;
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY notifications_own ON notifications
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid());
+
+CREATE POLICY notifications_service ON notifications
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- ============================================
+-- MIGRATION: 025_create_audit_logs.sql
+-- ============================================
+-- 025: Create audit_logs table for admin action tracking
+-- Stores a persistent, immutable trail of all admin actions
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id UUID NOT NULL REFERENCES users(id),
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT,
+  details JSONB DEFAULT '{}',
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ── Indexes ─────────────────────────────────────────────────────────────
+CREATE INDEX idx_audit_logs_admin_id ON audit_logs(admin_id);
+CREATE INDEX idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
+CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
+CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+
+-- ── RLS ─────────────────────────────────────────────────────────────────
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Only service_role can read/write audit logs (no user-level access)
+CREATE POLICY "service_role_full_access"
+  ON audit_logs
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- ============================================
+-- MIGRATION: 026_create_password_reset_tokens.sql
+-- ============================================
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX idx_password_reset_tokens_expires ON password_reset_tokens(expires_at);
+
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY password_reset_tokens_service_all ON password_reset_tokens
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+-- ============================================
+-- MIGRATION: 027_email_verification.sql
+-- ============================================
+-- Add email_verified column to users if it doesn't exist
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
+
+-- Create email verification tokens table (same pattern as password_reset_tokens)
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_email_verification_tokens_token ON email_verification_tokens(token);
+CREATE INDEX idx_email_verification_tokens_user_id ON email_verification_tokens(user_id);
+
+ALTER TABLE email_verification_tokens ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY email_verification_tokens_service_all ON email_verification_tokens
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+-- ============================================
+-- MIGRATION: 028_add_product_original_price.sql
+-- ============================================
+-- Add original_price column to products
+-- original_price is nullable. null means no discount (regular price).
+-- When set, original_price is the "was" price and price is the current selling price.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS original_price NUMERIC(10,2) DEFAULT NULL;
+
+-- ============================================
+-- MIGRATION: 029_add_paypal_fields.sql
+-- ============================================
+-- Add PayPal support fields to orders table
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS paypal_order_id VARCHAR(255) DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_paypal_order_id ON orders(paypal_order_id)
+  WHERE paypal_order_id IS NOT NULL;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) DEFAULT NULL;
+-- Values: 'stripe', 'paypal', 'net30'
+
+-- ============================================
+-- MIGRATION: 030_create_credit_and_invoices.sql
+-- ============================================
+-- User credit table for Net30 terms
+CREATE TABLE IF NOT EXISTS user_credit (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  credit_limit NUMERIC(12,2) NOT NULL DEFAULT 50000.00,
+  credit_used NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+  eligible BOOLEAN NOT NULL DEFAULT false,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_user_credit_user_id ON user_credit(user_id);
+
+ALTER TABLE user_credit ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_credit_service_all ON user_credit
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY user_credit_own_read ON user_credit
+  FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+
+-- Invoices table for Net30 order tracking
+CREATE TABLE IF NOT EXISTS invoices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id),
+  amount NUMERIC(12,2) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
+  due_date TIMESTAMPTZ NOT NULL,
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_invoices_order_id ON invoices(order_id);
+CREATE INDEX idx_invoices_user_id ON invoices(user_id);
+CREATE INDEX idx_invoices_status ON invoices(status);
+CREATE INDEX idx_invoices_due_date ON invoices(due_date);
+
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY invoices_service_all ON invoices
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY invoices_own_read ON invoices
+  FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+
+-- Ensure commission_rate default on suppliers table
+ALTER TABLE suppliers ALTER COLUMN commission_rate SET DEFAULT 10;
+
+-- Atomic credit deduction function (prevents race conditions)
+CREATE OR REPLACE FUNCTION deduct_credit(p_user_id UUID, p_amount NUMERIC)
+RETURNS BOOLEAN AS $$
+DECLARE
+  rows_affected INTEGER;
+BEGIN
+  UPDATE user_credit
+  SET credit_used = credit_used + p_amount,
+      updated_at = now()
+  WHERE user_id = p_user_id
+    AND eligible = true
+    AND (credit_limit - credit_used) >= p_amount;
+  GET DIAGNOSTICS rows_affected = ROW_COUNT;
+  RETURN rows_affected > 0;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Atomic credit restore function (used on cancellation/refund)
+CREATE OR REPLACE FUNCTION restore_credit(p_user_id UUID, p_amount NUMERIC)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE user_credit
+  SET credit_used = GREATEST(credit_used - p_amount, 0),
+      updated_at = now()
+  WHERE user_id = p_user_id;
+END;
+$$ LANGUAGE plpgsql;

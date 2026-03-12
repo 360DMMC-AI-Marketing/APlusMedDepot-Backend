@@ -17,6 +17,7 @@ type ProductRow = {
   description: string | null;
   sku: string;
   price: string;
+  original_price: string | null;
   stock_quantity: number;
   category: string | null;
   status: string;
@@ -30,7 +31,7 @@ type ProductRow = {
 };
 
 const PRODUCT_SELECT_FIELDS =
-  "id, supplier_id, name, description, sku, price, stock_quantity, category, status, images, specifications, weight, dimensions, is_deleted, created_at, updated_at";
+  "id, supplier_id, name, description, sku, price, original_price, stock_quantity, category, status, images, specifications, weight, dimensions, is_deleted, created_at, updated_at";
 
 const toSupplierProduct = (row: ProductRow): SupplierProduct => ({
   id: row.id,
@@ -39,6 +40,7 @@ const toSupplierProduct = (row: ProductRow): SupplierProduct => ({
   description: row.description,
   sku: row.sku,
   price: Number(row.price),
+  originalPrice: row.original_price ? Number(row.original_price) : null,
   stockQuantity: row.stock_quantity,
   category: row.category,
   status: row.status as SupplierProduct["status"],
@@ -209,6 +211,7 @@ export class SupplierProductService {
         description: input.description,
         sku: input.sku,
         price: input.price,
+        original_price: input.original_price ?? null,
         stock_quantity: input.stock_quantity,
         category: input.category,
         status: "pending",
@@ -282,6 +285,7 @@ export class SupplierProductService {
       }
 
       if (input.price !== undefined) updateData.price = input.price;
+      if (input.original_price !== undefined) updateData.original_price = input.original_price;
       if (input.stock_quantity !== undefined) updateData.stock_quantity = input.stock_quantity;
     } else {
       // For pending, rejected, needs_revision — allow full edit
@@ -292,6 +296,7 @@ export class SupplierProductService {
       if (input.weight !== undefined) updateData.weight = input.weight;
       if (input.dimensions !== undefined) updateData.dimensions = input.dimensions;
       if (input.price !== undefined) updateData.price = input.price;
+      if (input.original_price !== undefined) updateData.original_price = input.original_price;
       if (input.stock_quantity !== undefined) updateData.stock_quantity = input.stock_quantity;
 
       // Handle SKU change with per-supplier uniqueness check

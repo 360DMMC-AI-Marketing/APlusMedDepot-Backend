@@ -22,3 +22,6 @@ export const forbidden = (message?: string): AppError =>
 export const badRequest = (message: string): AppError => new AppError(message, 400, "BAD_REQUEST");
 
 export const conflict = (message: string): AppError => new AppError(message, 409, "CONFLICT");
+
+export const serviceUnavailable = (message: string): AppError =>
+  new AppError(message, 503, "SERVICE_UNAVAILABLE");

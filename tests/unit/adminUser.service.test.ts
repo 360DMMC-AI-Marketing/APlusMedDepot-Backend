@@ -321,7 +321,7 @@ describe("AdminUserService.rejectUser", () => {
     expect(updateQ.update).toHaveBeenCalledWith(expect.objectContaining({ status: "rejected" }));
     expect(sendEmail).toHaveBeenCalledWith(
       "test@example.com",
-      "APlusMedDepot Account Application Update",
+      "APlusMedDepot Application Update",
       expect.stringContaining("Invalid documentation"),
     );
     expect(logAdminAction).toHaveBeenCalledWith(

@@ -154,6 +154,7 @@ export type AdminProductListItem = {
   name: string;
   sku: string;
   price: number;
+  originalPrice: number | null;
   stockQuantity: number;
   category: string | null;
   status: string;
@@ -169,6 +170,7 @@ export type AdminProductDetail = {
   description: string | null;
   sku: string;
   price: number;
+  originalPrice: number | null;
   stockQuantity: number;
   category: string | null;
   status: string;
