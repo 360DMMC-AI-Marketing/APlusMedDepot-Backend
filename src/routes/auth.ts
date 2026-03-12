@@ -361,4 +361,71 @@ router.post("/forgot-password", passwordRateLimiter, AuthController.forgotPasswo
  */
 router.post("/reset-password", passwordRateLimiter, AuthController.resetPassword);
 
+/**
+ * @openapi
+ * /auth/verify-email:
+ *   post:
+ *     summary: Verify email address with token
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid or expired token
+ *       429:
+ *         description: Rate limit exceeded
+ */
+router.post("/verify-email", passwordRateLimiter, AuthController.verifyEmail);
+
+/**
+ * @openapi
+ * /auth/resend-verification:
+ *   post:
+ *     summary: Resend email verification link
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Verification email sent (if applicable)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       409:
+ *         description: Email is already verified
+ *       429:
+ *         description: Rate limit exceeded
+ */
+router.post("/resend-verification", passwordRateLimiter, AuthController.resendVerification);
+
 export default router;

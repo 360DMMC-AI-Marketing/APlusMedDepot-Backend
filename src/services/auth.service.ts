@@ -187,6 +187,11 @@ export class AuthService {
         throw new AuthServiceError("SIGN_UP_FAILED", "Session not created", 500);
       }
 
+      // Fire-and-forget verification email
+      this.sendVerificationEmail(authUser.id).catch((err: unknown) => {
+        console.error("Failed to send verification email:", err);
+      });
+
       return { user: toAuthUser(userRow), session: toAuthSession(signInData.session) };
     } catch (error) {
       if (error instanceof AuthServiceError) {
@@ -468,6 +473,128 @@ export class AuthService {
         console.error("Failed to send password change confirmation:", emailErr);
       });
     }
+  }
+
+  static async sendVerificationEmail(userId: string): Promise<void> {
+    const { data: user } = await supabaseAdmin
+      .from("users")
+      .select("id, email, first_name, email_verified")
+      .eq("id", userId)
+      .single();
+
+    if (!user || user.email_verified) {
+      return;
+    }
+
+    // Invalidate any existing unused verification tokens
+    await supabaseAdmin
+      .from("email_verification_tokens")
+      .update({ used: true })
+      .eq("user_id", userId)
+      .eq("used", false);
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const { error: insertError } = await supabaseAdmin
+      .from("email_verification_tokens")
+      .insert({ user_id: userId, token, expires_at: expiresAt });
+
+    if (insertError) {
+      console.error("Failed to create verification token:", insertError.message);
+      return;
+    }
+
+    const frontendUrl = getEnv().FRONTEND_URL;
+    const verifyUrl = `${frontendUrl}/verify-email?token=${token}`;
+
+    const firstName = escapeHtml(user.first_name || "there");
+    sendEmail(
+      user.email,
+      "Verify Your APlusMedDepot Email",
+      baseLayout({
+        title: "Email Verification",
+        preheader: "Verify your email address",
+        body: `
+            <p>Hi ${firstName},</p>
+            <p>Thanks for registering with APlusMedDepot.</p>
+            <p>Please verify your email address by clicking the link below:</p>
+            <p><a href="${verifyUrl}" style="display:inline-block;padding:12px 24px;background-color:#2563eb;color:white;text-decoration:none;border-radius:6px;">Verify Email</a></p>
+            <p>Or copy this link: ${escapeHtml(verifyUrl)}</p>
+            <p>This link expires in 24 hours.</p>
+            <p>If you didn't create an account, you can safely ignore this email.</p>
+          `,
+      }),
+    ).catch((emailErr: unknown) => {
+      console.error("Failed to send verification email:", emailErr);
+    });
+  }
+
+  static async verifyEmail(token: string): Promise<void> {
+    const { data: tokenRecord, error: tokenError } = await supabaseAdmin
+      .from("email_verification_tokens")
+      .select("id, user_id, expires_at")
+      .eq("token", token)
+      .eq("used", false)
+      .single();
+
+    if (tokenError || !tokenRecord) {
+      throw new AuthServiceError("INVALID_TOKEN", "Invalid or expired verification token", 400);
+    }
+
+    if (new Date(tokenRecord.expires_at) < new Date()) {
+      await supabaseAdmin
+        .from("email_verification_tokens")
+        .update({ used: true })
+        .eq("id", tokenRecord.id);
+
+      throw new AuthServiceError(
+        "TOKEN_EXPIRED",
+        "Verification token has expired. Please request a new one.",
+        400,
+      );
+    }
+
+    // Mark email as verified
+    await supabaseAdmin
+      .from("users")
+      .update({ email_verified: true, updated_at: new Date().toISOString() })
+      .eq("id", tokenRecord.user_id);
+
+    // Mark token as used
+    await supabaseAdmin
+      .from("email_verification_tokens")
+      .update({ used: true })
+      .eq("id", tokenRecord.id);
+
+    // Invalidate all other unused tokens for this user
+    await supabaseAdmin
+      .from("email_verification_tokens")
+      .update({ used: true })
+      .eq("user_id", tokenRecord.user_id)
+      .eq("used", false);
+  }
+
+  static async resendVerification(email: string): Promise<void> {
+    const { data: user } = await supabaseAdmin
+      .from("users")
+      .select("id, email, email_verified, status")
+      .eq("email", email.toLowerCase().trim())
+      .single();
+
+    if (!user) {
+      return;
+    }
+
+    if (user.status !== "approved") {
+      return;
+    }
+
+    if (user.email_verified) {
+      throw new AuthServiceError("ALREADY_VERIFIED", "Email is already verified", 409);
+    }
+
+    await this.sendVerificationEmail(user.id);
   }
 
   static async refreshSession(refreshToken: string): Promise<AuthSession> {
