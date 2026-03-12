@@ -13,6 +13,7 @@ export interface Product {
   description: string | null;
   sku: string;
   price: number;
+  originalPrice: number | null;
   stockQuantity: number;
   category: string | null;
   status: ProductStatus;
@@ -31,6 +32,7 @@ export interface CreateProductRequest {
   description?: string;
   sku: string;
   price: number;
+  originalPrice?: number | null;
   stockQuantity: number;
   category?: string;
   images?: string[];
@@ -45,6 +47,7 @@ export interface UpdateProductRequest {
   description?: string;
   sku?: string;
   price?: number;
+  originalPrice?: number | null;
   stockQuantity?: number;
   category?: string;
   images?: string[];

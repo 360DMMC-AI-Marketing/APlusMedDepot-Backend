@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../config/supabase";
-import { conflict, forbidden, notFound } from "../utils/errors";
+import { AppError, conflict, forbidden, notFound } from "../utils/errors";
 import { logAdminAction } from "../utils/securityLogger";
 import { sendEmail } from "./email.service";
 import { AuditLogService } from "./auditLog.service";
@@ -12,6 +12,12 @@ import type {
   PaginatedResult,
 } from "../types/admin.types";
 import type { AuditContext } from "../middleware/auditMiddleware";
+
+export type RejectionData = {
+  reasons: string[];
+  customReason?: string;
+  sendEmail?: boolean;
+};
 
 type UserRow = {
   id: string;
@@ -158,11 +164,19 @@ export class AdminUserService {
     userId: string,
     adminId: string,
     auditCtx?: AuditContext,
+    options?: { commissionRate?: number },
   ): Promise<void> {
     const user = await this.fetchUserOrThrow(userId);
 
     if (user.status !== "pending") {
       throw conflict("User is not in pending status");
+    }
+
+    // Validate commission rate if provided
+    if (options?.commissionRate !== undefined) {
+      if (options.commissionRate < 1 || options.commissionRate > 50) {
+        throw new AppError("Commission rate must be between 1 and 50", 400, "VALIDATION_ERROR");
+      }
     }
 
     const { error } = await supabaseAdmin
@@ -175,7 +189,11 @@ export class AdminUserService {
     }
 
     if (user.role === "supplier") {
-      await supabaseAdmin.from("suppliers").update({ status: "approved" }).eq("user_id", userId);
+      const supplierUpdate: Record<string, unknown> = { status: "approved" };
+      if (options?.commissionRate !== undefined) {
+        supplierUpdate.commission_rate = options.commissionRate;
+      }
+      await supabaseAdmin.from("suppliers").update(supplierUpdate).eq("user_id", userId);
     }
 
     void sendEmail(
@@ -203,7 +221,7 @@ export class AdminUserService {
       action: "user_approved",
       resourceType: "user",
       resourceId: userId,
-      details: { role: user.role },
+      details: { role: user.role, commissionRate: options?.commissionRate },
       ipAddress: auditCtx?.ipAddress,
       userAgent: auditCtx?.userAgent,
     });
@@ -212,7 +230,7 @@ export class AdminUserService {
   static async rejectUser(
     userId: string,
     adminId: string,
-    reason: string,
+    reason: string | RejectionData,
     auditCtx?: AuditContext,
   ): Promise<void> {
     const user = await this.fetchUserOrThrow(userId);
@@ -220,6 +238,15 @@ export class AdminUserService {
     if (user.status !== "pending") {
       throw conflict("User is not in pending status");
     }
+
+    // Normalize old format (string) to new format (RejectionData)
+    const rejectionData: RejectionData =
+      typeof reason === "string" ? { reasons: [reason], sendEmail: true } : reason;
+
+    const allReasons = [...rejectionData.reasons, rejectionData.customReason].filter(
+      Boolean,
+    ) as string[];
+    const combinedReason = allReasons.join("; ");
 
     const { error } = await supabaseAdmin
       .from("users")
@@ -234,25 +261,30 @@ export class AdminUserService {
       await supabaseAdmin.from("suppliers").update({ status: "rejected" }).eq("user_id", userId);
     }
 
-    void sendEmail(
-      user.email,
-      "APlusMedDepot Account Application Update",
-      baseLayout({
-        title: "Account Application Update",
-        preheader: "Update on your account application",
-        body: `
-          <p>Unfortunately, your account application was not approved.</p>
-          <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
-          <p>If you believe this was in error, please contact our support team.</p>
-        `,
-      }),
-    );
+    if (rejectionData.sendEmail !== false) {
+      const reasonBullets = allReasons.map((r) => `<li>${escapeHtml(r)}</li>`).join("\n");
+      void sendEmail(
+        user.email,
+        "APlusMedDepot Application Update",
+        baseLayout({
+          title: "Application Update",
+          preheader: "Update on your account application",
+          body: `
+            <p>Hi ${escapeHtml(user.first_name ?? "there")},</p>
+            <p>After reviewing your application, we were unable to approve it at this time.</p>
+            <p><strong>Reasons:</strong></p>
+            <ul>${reasonBullets}</ul>
+            <p>If you have questions or would like to resubmit, please contact our support team.</p>
+          `,
+        }),
+      );
+    }
 
     logAdminAction({
       action: "user_rejected",
       adminId,
       targetUserId: userId,
-      reason,
+      reason: combinedReason,
       timestamp: new Date().toISOString(),
     });
 
@@ -261,7 +293,12 @@ export class AdminUserService {
       action: "user_rejected",
       resourceType: "user",
       resourceId: userId,
-      details: { reason, role: user.role },
+      details: {
+        reasons: rejectionData.reasons,
+        customReason: rejectionData.customReason,
+        sendEmail: rejectionData.sendEmail,
+        role: user.role,
+      },
       ipAddress: auditCtx?.ipAddress,
       userAgent: auditCtx?.userAgent,
     });

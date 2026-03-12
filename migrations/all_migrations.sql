@@ -1422,3 +1422,11 @@ ALTER TABLE email_verification_tokens ENABLE ROW LEVEL SECURITY;
 CREATE POLICY email_verification_tokens_service_all ON email_verification_tokens
   FOR ALL TO service_role
   USING (true) WITH CHECK (true);
+
+-- ============================================
+-- MIGRATION: 028_add_product_original_price.sql
+-- ============================================
+-- Add original_price column to products
+-- original_price is nullable. null means no discount (regular price).
+-- When set, original_price is the "was" price and price is the current selling price.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS original_price NUMERIC(10,2) DEFAULT NULL;

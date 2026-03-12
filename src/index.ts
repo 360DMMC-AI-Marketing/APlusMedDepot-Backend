@@ -38,6 +38,7 @@ import commissionReportRoutes from "./routes/commissionReport.routes";
 import { notificationUserRouter, notificationAdminRouter } from "./routes/notification.routes";
 import auditLogRoutes from "./routes/auditLog.routes";
 import userProfileRoutes from "./routes/userProfile.routes";
+import bulkImportRoutes from "./routes/bulkImport.routes";
 
 const app = express();
 
@@ -79,6 +80,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/suppliers/analytics", supplierAnalyticsRoutes);
 app.use("/api/suppliers/inventory", supplierInventoryRoutes);
+app.use("/api/suppliers/products/bulk-import", bulkImportRoutes);
 app.use("/api/suppliers/products", supplierProductRoutes);
 app.use("/api/suppliers/me/orders", supplierOrderRoutes);
 app.use("/api/suppliers/me/payouts", supplierPayoutRouter);

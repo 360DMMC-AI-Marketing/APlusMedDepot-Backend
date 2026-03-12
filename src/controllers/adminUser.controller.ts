@@ -22,6 +22,16 @@ const reasonSchema = z.object({
     .max(500, "Reason must not exceed 500 characters"),
 });
 
+const approveBodySchema = z.object({
+  commissionRate: z.number().min(1).max(50).optional(),
+});
+
+const rejectBodySchema = z.object({
+  reasons: z.array(z.string().min(1)).min(1, "At least one reason required"),
+  customReason: z.string().max(500).optional(),
+  sendEmail: z.boolean().optional().default(true),
+});
+
 export class AdminUserController {
   static async list(req: Request, res: Response): Promise<void> {
     const options = listUsersSchema.parse(req.query);
@@ -37,14 +47,26 @@ export class AdminUserController {
 
   static async approve(req: Request, res: Response): Promise<void> {
     const userId = uuidSchema.parse(req.params.id);
-    await AdminUserService.approveUser(userId, req.user!.id, req.auditContext);
+    const body = approveBodySchema.parse(req.body ?? {});
+    await AdminUserService.approveUser(userId, req.user!.id, req.auditContext, {
+      commissionRate: body.commissionRate,
+    });
     res.status(200).json({ message: "User approved successfully" });
   }
 
   static async reject(req: Request, res: Response): Promise<void> {
     const userId = uuidSchema.parse(req.params.id);
-    const { reason } = reasonSchema.parse(req.body);
-    await AdminUserService.rejectUser(userId, req.user!.id, reason, req.auditContext);
+
+    // Backward compatibility: accept old { reason: string } format
+    const body = req.body as Record<string, unknown>;
+    if (typeof body.reason === "string" && !body.reasons) {
+      const { reason } = reasonSchema.parse(body);
+      await AdminUserService.rejectUser(userId, req.user!.id, reason, req.auditContext);
+    } else {
+      const rejectionData = rejectBodySchema.parse(body);
+      await AdminUserService.rejectUser(userId, req.user!.id, rejectionData, req.auditContext);
+    }
+
     res.status(200).json({ message: "User rejected successfully" });
   }
 
