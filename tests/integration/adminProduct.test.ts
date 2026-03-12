@@ -17,6 +17,10 @@ const mockGetReviewDetail = jest.fn();
 const mockApprove = jest.fn();
 const mockRequestChanges = jest.fn();
 const mockReject = jest.fn();
+const mockListProducts = jest.fn();
+const mockGetProductDetail = jest.fn();
+const mockFeatureProduct = jest.fn();
+const mockUnfeatureProduct = jest.fn();
 
 jest.mock("../../src/services/adminProduct.service", () => ({
   AdminProductService: {
@@ -25,6 +29,10 @@ jest.mock("../../src/services/adminProduct.service", () => ({
     approve: mockApprove,
     requestChanges: mockRequestChanges,
     reject: mockReject,
+    listProducts: mockListProducts,
+    getProductDetail: mockGetProductDetail,
+    featureProduct: mockFeatureProduct,
+    unfeatureProduct: mockUnfeatureProduct,
   },
 }));
 
@@ -314,7 +322,7 @@ describe("Admin Product Approval API", () => {
       expect(res.body.reviewed_by).toBe(ADMIN_USER_ID);
       expect(res.body.reviewed_at).toBeDefined();
       expect(res.body.admin_feedback).toBeNull();
-      expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID);
+      expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID, expect.anything());
     });
 
     it("returns 400 when product is not in pending status", async () => {
@@ -369,6 +377,7 @@ describe("Admin Product Approval API", () => {
         PRODUCT_ID,
         ADMIN_USER_ID,
         "Please add clearer product images and update the description.",
+        expect.anything(),
       );
     });
 
@@ -448,6 +457,7 @@ describe("Admin Product Approval API", () => {
         PRODUCT_ID,
         ADMIN_USER_ID,
         "This product does not meet our quality standards for medical supplies.",
+        expect.anything(),
       );
     });
 
@@ -531,7 +541,288 @@ describe("Admin Product Approval API", () => {
 
       expect(res2.status).toBe(200);
       expect(res2.body.status).toBe("active");
-      expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID);
+      expect(mockApprove).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID, expect.anything());
+    });
+  });
+
+  // =========================================================================
+  // GET /api/admin/products  (list all products)
+  // =========================================================================
+  describe("GET / (list all products)", () => {
+    it("returns paginated product list", async () => {
+      authAs(adminUser);
+      mockListProducts.mockResolvedValue({
+        data: [
+          {
+            id: PRODUCT_ID,
+            name: "Surgical Gloves",
+            sku: "SG-001",
+            price: 9.99,
+            stockQuantity: 100,
+            category: "PPE",
+            status: "active",
+            supplierName: "MedSupply Co",
+            supplierId: SUPPLIER_ID,
+            isFeatured: false,
+            createdAt: "2025-01-01T00:00:00Z",
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 20,
+        totalPages: 1,
+      });
+
+      const res = await request(app)
+        .get("/api/admin/products")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].name).toBe("Surgical Gloves");
+      expect(res.body.total).toBe(1);
+    });
+
+    it("passes filter params to service", async () => {
+      authAs(adminUser);
+      mockListProducts.mockResolvedValue({
+        data: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0,
+      });
+
+      await request(app)
+        .get("/api/admin/products?status=pending&category=PPE&search=glove&page=2&limit=10")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(mockListProducts).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "pending",
+          category: "PPE",
+          search: "glove",
+          page: 2,
+          limit: 10,
+        }),
+      );
+    });
+
+    it("returns 400 for invalid status filter", async () => {
+      authAs(adminUser);
+
+      const res = await request(app)
+        .get("/api/admin/products?status=invalid_status")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 403 for non-admin user", async () => {
+      authAs(supplierUser);
+
+      const res = await request(app)
+        .get("/api/admin/products")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  // =========================================================================
+  // GET /api/admin/products/:id  (product detail)
+  // =========================================================================
+  describe("GET /:id (product detail)", () => {
+    const productDetail = {
+      id: PRODUCT_ID,
+      name: "Surgical Gloves",
+      description: "High quality surgical gloves",
+      sku: "SG-001",
+      price: 9.99,
+      stockQuantity: 100,
+      category: "PPE",
+      status: "active",
+      images: null,
+      specifications: null,
+      weight: null,
+      dimensions: null,
+      isFeatured: true,
+      isDeleted: false,
+      reviewedBy: ADMIN_USER_ID,
+      reviewedAt: "2025-01-05T00:00:00Z",
+      adminFeedback: null,
+      supplier: {
+        id: SUPPLIER_ID,
+        businessName: "MedSupply Co",
+        status: "approved",
+        commissionRate: 15,
+      },
+      salesStats: {
+        totalOrders: 5,
+        totalSold: 50,
+        totalRevenue: 499.5,
+      },
+      createdAt: "2025-01-01T00:00:00Z",
+      updatedAt: "2025-01-05T00:00:00Z",
+    };
+
+    it("returns full product detail with supplier info and sales stats", async () => {
+      authAs(adminUser);
+      mockGetProductDetail.mockResolvedValue(productDetail);
+
+      const res = await request(app)
+        .get(`/api/admin/products/${PRODUCT_ID}`)
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(PRODUCT_ID);
+      expect(res.body.supplier.businessName).toBe("MedSupply Co");
+      expect(res.body.salesStats.totalOrders).toBe(5);
+      expect(res.body.salesStats.totalRevenue).toBe(499.5);
+      expect(res.body.isFeatured).toBe(true);
+    });
+
+    it("returns 404 for non-existent product", async () => {
+      authAs(adminUser);
+      mockGetProductDetail.mockRejectedValue(new AppError("Product not found", 404, "NOT_FOUND"));
+
+      const res = await request(app)
+        .get(`/api/admin/products/${PRODUCT_ID}`)
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 400 for invalid UUID", async () => {
+      authAs(adminUser);
+
+      const res = await request(app)
+        .get("/api/admin/products/not-a-uuid")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // =========================================================================
+  // PUT /api/admin/products/:id/feature
+  // =========================================================================
+  describe("PUT /:id/feature", () => {
+    it("features an active product", async () => {
+      authAs(adminUser);
+      mockFeatureProduct.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .put(`/api/admin/products/${PRODUCT_ID}/feature`)
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Product featured successfully");
+      expect(mockFeatureProduct).toHaveBeenCalledWith(PRODUCT_ID, ADMIN_USER_ID, expect.anything());
+    });
+
+    it("returns 409 when product is not active", async () => {
+      authAs(adminUser);
+      mockFeatureProduct.mockRejectedValue(
+        new AppError("Only active products can be featured", 409, "CONFLICT"),
+      );
+
+      const res = await request(app)
+        .put(`/api/admin/products/${PRODUCT_ID}/feature`)
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(409);
+    });
+
+    it("returns 404 for non-existent product", async () => {
+      authAs(adminUser);
+      mockFeatureProduct.mockRejectedValue(new AppError("Product not found", 404, "NOT_FOUND"));
+
+      const res = await request(app)
+        .put(`/api/admin/products/${PRODUCT_ID}/feature`)
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 400 for invalid UUID", async () => {
+      authAs(adminUser);
+
+      const res = await request(app)
+        .put("/api/admin/products/not-a-uuid/feature")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // =========================================================================
+  // PUT /api/admin/products/:id/unfeature
+  // =========================================================================
+  describe("PUT /:id/unfeature", () => {
+    it("unfeatures a product", async () => {
+      authAs(adminUser);
+      mockUnfeatureProduct.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .put(`/api/admin/products/${PRODUCT_ID}/unfeature`)
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Product unfeatured successfully");
+      expect(mockUnfeatureProduct).toHaveBeenCalledWith(
+        PRODUCT_ID,
+        ADMIN_USER_ID,
+        expect.anything(),
+      );
+    });
+
+    it("returns 404 for non-existent product", async () => {
+      authAs(adminUser);
+      mockUnfeatureProduct.mockRejectedValue(new AppError("Product not found", 404, "NOT_FOUND"));
+
+      const res = await request(app)
+        .put(`/api/admin/products/${PRODUCT_ID}/unfeature`)
+        .set("Authorization", "Bearer valid-token");
+
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // =========================================================================
+  // Full lifecycle: pending → needs_revision → re-approve → featured
+  // =========================================================================
+  describe("Full lifecycle: pending → needs_revision → approved → featured", () => {
+    it("completes the full product lifecycle", async () => {
+      authAs(adminUser);
+
+      // Step 1: Request changes on pending product
+      mockRequestChanges.mockResolvedValue(changesRequestedProduct);
+      const res1 = await request(app)
+        .put(`/api/admin/products/${PRODUCT_ID}/request-changes`)
+        .set("Authorization", "Bearer valid-token")
+        .send({ feedback: "Please add clearer product images and update the description." });
+      expect(res1.status).toBe(200);
+      expect(res1.body.status).toBe("needs_revision");
+
+      // Step 2: Approve the revised product (re-approval)
+      mockApprove.mockResolvedValue({
+        ...approvedProduct,
+        reviewed_at: "2025-01-10T00:00:00.000Z",
+      });
+      const res2 = await request(app)
+        .put(`/api/admin/products/${PRODUCT_ID}/approve`)
+        .set("Authorization", "Bearer valid-token");
+      expect(res2.status).toBe(200);
+      expect(res2.body.status).toBe("active");
+
+      // Step 3: Feature the approved product
+      mockFeatureProduct.mockResolvedValue(undefined);
+      const res3 = await request(app)
+        .put(`/api/admin/products/${PRODUCT_ID}/feature`)
+        .set("Authorization", "Bearer valid-token");
+      expect(res3.status).toBe(200);
+      expect(res3.body.message).toBe("Product featured successfully");
     });
   });
 });
