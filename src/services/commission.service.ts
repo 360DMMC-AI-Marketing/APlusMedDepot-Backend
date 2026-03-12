@@ -59,102 +59,98 @@ export class CommissionService {
       return [];
     }
 
-    const results: CommissionResult[] = [];
+    // Pre-calculate all commission amounts and build insert records
+    const insertRecords: Array<Record<string, unknown>> = [];
+    const supplierBalanceIncrements = new Map<string, number>();
 
     for (const item of items) {
       const ratePercent = Number(item.suppliers?.commission_rate ?? DEFAULT_COMMISSION_RATE);
       const rate = ratePercent / 100;
       const saleAmount = Number(item.subtotal);
 
-      // Handle zero-dollar items
       if (saleAmount === 0) {
-        const { data: zeroCommission, error: zeroError } = await supabaseAdmin
-          .from("commissions")
-          .insert({
-            order_item_id: item.id,
-            supplier_id: item.supplier_id,
-            order_id: orderId,
-            sale_amount: 0,
-            commission_rate: ratePercent,
-            commission_amount: 0,
-            platform_amount: 0,
-            supplier_payout: 0,
-            supplier_amount: 0,
-            status: "pending",
-          })
-          .select("id")
-          .single();
-
-        if (zeroError || !zeroCommission) {
-          console.error(
-            `[COMMISSION] Failed to insert zero commission for item ${item.id}: ${zeroError?.message}`,
-          );
-          continue;
-        }
-
-        const zeroRow = zeroCommission as unknown as { id: string };
-        results.push({
-          commissionId: zeroRow.id,
-          orderItemId: item.id,
-          supplierId: item.supplier_id,
-          saleAmount: 0,
-          commissionAmount: 0,
-          supplierAmount: 0,
+        insertRecords.push({
+          order_item_id: item.id,
+          supplier_id: item.supplier_id,
+          order_id: orderId,
+          sale_amount: 0,
+          commission_rate: ratePercent,
+          commission_amount: 0,
+          platform_amount: 0,
+          supplier_payout: 0,
+          supplier_amount: 0,
+          status: "pending",
         });
         continue;
       }
 
       const commissionAmount = Math.round(saleAmount * rate * 100) / 100;
       const supplierAmount = Math.round((saleAmount - commissionAmount) * 100) / 100;
-      const platformAmount = commissionAmount;
 
-      // Insert commission record
-      const { data: commissionData, error: commissionError } = await supabaseAdmin
-        .from("commissions")
-        .insert({
-          order_item_id: item.id,
-          supplier_id: item.supplier_id,
-          order_id: orderId,
-          sale_amount: saleAmount,
-          commission_rate: ratePercent,
-          commission_amount: commissionAmount,
-          platform_amount: platformAmount,
-          supplier_payout: supplierAmount,
-          supplier_amount: supplierAmount,
-          status: "pending",
-        })
-        .select("id")
-        .single();
+      insertRecords.push({
+        order_item_id: item.id,
+        supplier_id: item.supplier_id,
+        order_id: orderId,
+        sale_amount: saleAmount,
+        commission_rate: ratePercent,
+        commission_amount: commissionAmount,
+        platform_amount: commissionAmount,
+        supplier_payout: supplierAmount,
+        supplier_amount: supplierAmount,
+        status: "pending",
+      });
 
-      if (commissionError || !commissionData) {
-        console.error(
-          `[COMMISSION] Failed to insert commission for item ${item.id}: ${commissionError?.message}`,
-        );
-        continue;
-      }
+      // Accumulate balance increments per supplier
+      const current = supplierBalanceIncrements.get(item.supplier_id) ?? 0;
+      supplierBalanceIncrements.set(item.supplier_id, current + supplierAmount);
+    }
 
-      const commissionRow = commissionData as unknown as { id: string };
+    if (insertRecords.length === 0) {
+      return [];
+    }
 
-      // Atomic balance increment
+    // Bulk insert all commission records (single query instead of N)
+    const { data: insertedData, error: insertError } = await supabaseAdmin
+      .from("commissions")
+      .insert(insertRecords)
+      .select("id, order_item_id, supplier_id, sale_amount, commission_amount, supplier_amount");
+
+    if (insertError || !insertedData) {
+      console.error(`[COMMISSION] Failed to bulk insert commissions: ${insertError?.message}`);
+      return [];
+    }
+
+    type InsertedRow = {
+      id: string;
+      order_item_id: string;
+      supplier_id: string;
+      sale_amount: string;
+      commission_amount: string;
+      supplier_amount: string;
+    };
+
+    const inserted = (insertedData ?? []) as unknown as InsertedRow[];
+    const results: CommissionResult[] = inserted.map((row) => ({
+      commissionId: row.id,
+      orderItemId: row.order_item_id,
+      supplierId: row.supplier_id,
+      saleAmount: Number(row.sale_amount),
+      commissionAmount: Number(row.commission_amount),
+      supplierAmount: Number(row.supplier_amount),
+    }));
+
+    // Batch RPC calls: one per unique supplier instead of per item
+    for (const [supplierId, amount] of supplierBalanceIncrements) {
       const { error: balanceError } = await supabaseAdmin.rpc("increment_supplier_balance", {
-        p_supplier_id: item.supplier_id,
-        p_amount: supplierAmount,
+        p_supplier_id: supplierId,
+        p_amount: amount,
       });
 
       if (balanceError) {
         console.error(
-          `[COMMISSION] Failed to update balance for supplier ${item.supplier_id}: ${balanceError.message}`,
+          `[COMMISSION] Failed to update balance for supplier ${supplierId}: ${balanceError.message}`,
         );
       }
-
-      results.push({
-        commissionId: commissionRow.id,
-        orderItemId: item.id,
-        supplierId: item.supplier_id,
-        saleAmount,
-        commissionAmount,
-        supplierAmount,
-      });
     }
 
     return results;
@@ -199,30 +195,35 @@ export class CommissionService {
       return;
     }
 
+    // Batch update all commission statuses to reversed (single query instead of N)
+    const commissionIds = commissions.map((c) => c.id);
+    const { error: updateError } = await supabaseAdmin
+      .from("commissions")
+      .update({ status: "reversed" })
+      .in("id", commissionIds);
+
+    if (updateError) {
+      console.error(`[COMMISSION] Failed to reverse commissions: ${updateError.message}`);
+      return;
+    }
+
+    // Group payouts by supplier for batch RPC calls (one per supplier instead of per commission)
+    const supplierPayouts = new Map<string, number>();
     for (const commission of commissions) {
-      // Update status to reversed
-      const { error: updateError } = await supabaseAdmin
-        .from("commissions")
-        .update({ status: "reversed" })
-        .eq("id", commission.id);
-
-      if (updateError) {
-        console.error(
-          `[COMMISSION] Failed to reverse commission ${commission.id}: ${updateError.message}`,
-        );
-        continue;
-      }
-
-      // Deduct from supplier balance (negative amount, GREATEST prevents below 0)
       const payoutAmount = Number(commission.supplier_payout);
+      const current = supplierPayouts.get(commission.supplier_id) ?? 0;
+      supplierPayouts.set(commission.supplier_id, current + payoutAmount);
+    }
+
+    for (const [supplierId, totalAmount] of supplierPayouts) {
       const { error: balanceError } = await supabaseAdmin.rpc("increment_supplier_balance", {
-        p_supplier_id: commission.supplier_id,
-        p_amount: -payoutAmount,
+        p_supplier_id: supplierId,
+        p_amount: -totalAmount,
       });
 
       if (balanceError) {
         console.error(
-          `[COMMISSION] Failed to deduct balance for supplier ${commission.supplier_id}: ${balanceError.message}`,
+          `[COMMISSION] Failed to deduct balance for supplier ${supplierId}: ${balanceError.message}`,
         );
       }
     }
@@ -294,6 +295,8 @@ export class CommissionService {
     if (options?.endDate) {
       query = query.lte("created_at", options.endDate);
     }
+
+    query = query.order("created_at", { ascending: false }).limit(1000);
 
     const { data, error } = await query;
 

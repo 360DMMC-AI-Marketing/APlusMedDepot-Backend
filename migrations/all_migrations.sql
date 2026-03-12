@@ -1527,3 +1527,15 @@ BEGIN
   WHERE user_id = p_user_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ============================================
+-- MIGRATION: 031_performance_indexes.sql
+-- ============================================
+-- commissions.order_id — commission queries by order
+CREATE INDEX IF NOT EXISTS idx_commissions_order_id ON commissions(order_id);
+
+-- commissions.status — filtering out reversed commissions
+CREATE INDEX IF NOT EXISTS idx_commissions_status ON commissions(status);
+
+-- Composite index for supplier + status filtering
+CREATE INDEX IF NOT EXISTS idx_commissions_supplier_status ON commissions(supplier_id, status);

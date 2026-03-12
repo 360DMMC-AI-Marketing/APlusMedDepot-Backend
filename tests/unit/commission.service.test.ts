@@ -29,6 +29,7 @@ function mockQuery(result: { data?: unknown; error?: unknown }) {
   chain.is = jest.fn(self);
   chain.order = jest.fn(self);
   chain.range = jest.fn(self);
+  chain.limit = jest.fn(self);
   chain.single = jest.fn().mockResolvedValue(resolved);
   chain.then = jest
     .fn()
@@ -78,11 +79,21 @@ beforeEach(() => {
 
 describe("CommissionService.calculateOrderCommissions", () => {
   it("single item, rate 15.00 (15%) → correct commission and supplier amount", async () => {
-    // item subtotal = $100, rate = 15% → commission = $15, supplier = $85
     const itemsChain = mockQuery({
       data: [makeOrderItemWithSupplier()],
     });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "100.00",
+          commission_amount: "15.00",
+          supplier_amount: "85.00",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
@@ -105,15 +116,36 @@ describe("CommissionService.calculateOrderCommissions", () => {
     ];
 
     const itemsChain = mockQuery({ data: items });
-    const insert1 = mockQuery({ data: { id: "comm-1" } });
-    const insert2 = mockQuery({ data: { id: "comm-2" } });
-    const insert3 = mockQuery({ data: { id: "comm-3" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "50.00",
+          commission_amount: "7.50",
+          supplier_amount: "42.50",
+        },
+        {
+          id: "comm-2",
+          order_item_id: "oi-2",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "30.00",
+          commission_amount: "4.50",
+          supplier_amount: "25.50",
+        },
+        {
+          id: "comm-3",
+          order_item_id: "oi-3",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "20.00",
+          commission_amount: "3.00",
+          supplier_amount: "17.00",
+        },
+      ],
+    });
 
-    mockFrom
-      .mockReturnValueOnce(itemsChain)
-      .mockReturnValueOnce(insert1)
-      .mockReturnValueOnce(insert2)
-      .mockReturnValueOnce(insert3);
+    mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
     const result = await CommissionService.calculateOrderCommissions(ORDER_ID);
 
@@ -146,32 +178,54 @@ describe("CommissionService.calculateOrderCommissions", () => {
     ];
 
     const itemsChain = mockQuery({ data: items });
-    const insert1 = mockQuery({ data: { id: "comm-1" } });
-    const insert2 = mockQuery({ data: { id: "comm-2" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "100.00",
+          commission_amount: "15.00",
+          supplier_amount: "85.00",
+        },
+        {
+          id: "comm-2",
+          order_item_id: "oi-2",
+          supplier_id: SUPPLIER_2,
+          sale_amount: "100.00",
+          commission_amount: "12.00",
+          supplier_amount: "88.00",
+        },
+      ],
+    });
 
-    mockFrom
-      .mockReturnValueOnce(itemsChain)
-      .mockReturnValueOnce(insert1)
-      .mockReturnValueOnce(insert2);
+    mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
     const result = await CommissionService.calculateOrderCommissions(ORDER_ID);
 
     expect(result).toHaveLength(2);
-    // Supplier 1: 15% of $100 = $15
     expect(result[0].commissionAmount).toBe(15);
     expect(result[0].supplierAmount).toBe(85);
-    // Supplier 2: 12% of $100 = $12
     expect(result[1].commissionAmount).toBe(12);
     expect(result[1].supplierAmount).toBe(88);
   });
 
   it("rounding: $33.33 sale, 15% → commission $5.00, supplier $28.33, total = $33.33", async () => {
-    // 33.33 * 0.15 = 4.9995 → rounded to 5.00
-    // 33.33 - 5.00 = 28.33
     const items = [makeOrderItemWithSupplier({ id: "oi-1", subtotal: "33.33" })];
 
     const itemsChain = mockQuery({ data: items });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "33.33",
+          commission_amount: "5.00",
+          supplier_amount: "28.33",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
@@ -183,7 +237,6 @@ describe("CommissionService.calculateOrderCommissions", () => {
   });
 
   it("sale_amount ALWAYS = commission_amount + supplier_payout (no penny loss)", async () => {
-    // Test multiple tricky amounts
     const items = [
       makeOrderItemWithSupplier({ id: "oi-1", subtotal: "99.99" }),
       makeOrderItemWithSupplier({ id: "oi-2", subtotal: "0.01" }),
@@ -192,17 +245,45 @@ describe("CommissionService.calculateOrderCommissions", () => {
     ];
 
     const itemsChain = mockQuery({ data: items });
-    const i1 = mockQuery({ data: { id: "comm-1" } });
-    const i2 = mockQuery({ data: { id: "comm-2" } });
-    const i3 = mockQuery({ data: { id: "comm-3" } });
-    const i4 = mockQuery({ data: { id: "comm-4" } });
+    // 99.99*0.15=15.00, 0.01*0.15=0.00, 33.33*0.15=5.00, 66.67*0.15=10.00
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "99.99",
+          commission_amount: "15.00",
+          supplier_amount: "84.99",
+        },
+        {
+          id: "comm-2",
+          order_item_id: "oi-2",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "0.01",
+          commission_amount: "0.00",
+          supplier_amount: "0.01",
+        },
+        {
+          id: "comm-3",
+          order_item_id: "oi-3",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "33.33",
+          commission_amount: "5.00",
+          supplier_amount: "28.33",
+        },
+        {
+          id: "comm-4",
+          order_item_id: "oi-4",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "66.67",
+          commission_amount: "10.00",
+          supplier_amount: "56.67",
+        },
+      ],
+    });
 
-    mockFrom
-      .mockReturnValueOnce(itemsChain)
-      .mockReturnValueOnce(i1)
-      .mockReturnValueOnce(i2)
-      .mockReturnValueOnce(i3)
-      .mockReturnValueOnce(i4);
+    mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
     const result = await CommissionService.calculateOrderCommissions(ORDER_ID);
 
@@ -216,7 +297,18 @@ describe("CommissionService.calculateOrderCommissions", () => {
     const items = [makeOrderItemWithSupplier({ id: "oi-1", subtotal: "0.00" })];
 
     const itemsChain = mockQuery({ data: items });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "0.00",
+          commission_amount: "0.00",
+          supplier_amount: "0.00",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
@@ -238,7 +330,18 @@ describe("CommissionService.calculateOrderCommissions", () => {
     ];
 
     const itemsChain = mockQuery({ data: items });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "100.00",
+          commission_amount: "0.00",
+          supplier_amount: "100.00",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
@@ -258,13 +361,23 @@ describe("CommissionService.calculateOrderCommissions", () => {
     ];
 
     const itemsChain = mockQuery({ data: items });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "200.00",
+          commission_amount: "24.00",
+          supplier_amount: "176.00",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
     const result = await CommissionService.calculateOrderCommissions(ORDER_ID);
 
-    // 200 * 0.12 = 24
     expect(result[0].commissionAmount).toBe(24);
     expect(result[0].supplierAmount).toBe(176);
   });
@@ -279,7 +392,18 @@ describe("CommissionService.calculateOrderCommissions", () => {
     ];
 
     const itemsChain = mockQuery({ data: items });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "100.00",
+          commission_amount: "15.00",
+          supplier_amount: "85.00",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
@@ -293,7 +417,18 @@ describe("CommissionService.calculateOrderCommissions", () => {
     const items = [makeOrderItemWithSupplier({ id: "oi-1", subtotal: "100.00" })];
 
     const itemsChain = mockQuery({ data: items });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "100.00",
+          commission_amount: "15.00",
+          supplier_amount: "85.00",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
@@ -309,28 +444,50 @@ describe("CommissionService.calculateOrderCommissions", () => {
     const items = [makeOrderItemWithSupplier()];
 
     const itemsChain = mockQuery({ data: items });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "100.00",
+          commission_amount: "15.00",
+          supplier_amount: "85.00",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
     await CommissionService.calculateOrderCommissions(ORDER_ID);
 
-    const insertData = insertChain.insert.mock.calls[0][0] as Record<string, unknown>;
-    expect(insertData.status).toBe("pending");
+    const insertData = insertChain.insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+    expect(insertData[0].status).toBe("pending");
   });
 
   it("order_id populated on commission record", async () => {
     const items = [makeOrderItemWithSupplier()];
 
     const itemsChain = mockQuery({ data: items });
-    const insertChain = mockQuery({ data: { id: "comm-1" } });
+    const insertChain = mockQuery({
+      data: [
+        {
+          id: "comm-1",
+          order_item_id: "oi-1",
+          supplier_id: SUPPLIER_1,
+          sale_amount: "100.00",
+          commission_amount: "15.00",
+          supplier_amount: "85.00",
+        },
+      ],
+    });
 
     mockFrom.mockReturnValueOnce(itemsChain).mockReturnValueOnce(insertChain);
 
     await CommissionService.calculateOrderCommissions(ORDER_ID);
 
-    const insertData = insertChain.insert.mock.calls[0][0] as Record<string, unknown>;
-    expect(insertData.order_id).toBe(ORDER_ID);
+    const insertData = insertChain.insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+    expect(insertData[0].order_id).toBe(ORDER_ID);
   });
 });
 
@@ -344,20 +501,14 @@ describe("CommissionService.reverseOrderCommissions", () => {
     ];
 
     const fetchChain = mockQuery({ data: commissions });
-    const update1 = mockQuery({ data: null });
-    const update2 = mockQuery({ data: null });
+    const updateChain = mockQuery({ data: null });
 
-    mockFrom
-      .mockReturnValueOnce(fetchChain)
-      .mockReturnValueOnce(update1)
-      .mockReturnValueOnce(update2);
+    mockFrom.mockReturnValueOnce(fetchChain).mockReturnValueOnce(updateChain);
 
     await CommissionService.reverseOrderCommissions(ORDER_ID);
 
-    const update1Data = update1.update.mock.calls[0][0] as Record<string, unknown>;
-    expect(update1Data.status).toBe("reversed");
-    const update2Data = update2.update.mock.calls[0][0] as Record<string, unknown>;
-    expect(update2Data.status).toBe("reversed");
+    expect(updateChain.update).toHaveBeenCalledWith({ status: "reversed" });
+    expect(updateChain.in).toHaveBeenCalledWith("id", ["comm-1", "comm-2"]);
   });
 
   it("supplier balances decremented", async () => {
@@ -383,7 +534,6 @@ describe("CommissionService.reverseOrderCommissions", () => {
   });
 
   it("balance doesn't go below 0 (GREATEST check via RPC)", async () => {
-    // The GREATEST is in the SQL function, but we verify the negative amount is passed
     const commissions = [
       makeCommissionRow({
         id: "comm-1",
@@ -399,7 +549,6 @@ describe("CommissionService.reverseOrderCommissions", () => {
 
     await CommissionService.reverseOrderCommissions(ORDER_ID);
 
-    // Negative amount passed — the SQL function handles GREATEST(balance - amount, 0)
     expect(mockRpc).toHaveBeenCalledWith("increment_supplier_balance", {
       p_supplier_id: SUPPLIER_1,
       p_amount: -1000,
@@ -407,14 +556,12 @@ describe("CommissionService.reverseOrderCommissions", () => {
   });
 
   it("already reversed commissions → not reversed again (idempotent)", async () => {
-    // The query filters WHERE status != 'reversed', so already reversed are excluded
     const fetchChain = mockQuery({ data: [] });
 
     mockFrom.mockReturnValueOnce(fetchChain);
 
     await CommissionService.reverseOrderCommissions(ORDER_ID);
 
-    // No update calls, no RPC calls
     expect(mockFrom).toHaveBeenCalledTimes(1);
     expect(mockRpc).not.toHaveBeenCalled();
   });
@@ -426,7 +573,6 @@ describe("CommissionService.reverseOrderCommissions", () => {
 
     await CommissionService.reverseOrderCommissions(ORDER_ID);
 
-    // Verify neq was called with 'reversed'
     expect(fetchChain.neq).toHaveBeenCalledWith("status", "reversed");
   });
 });
@@ -506,7 +652,6 @@ describe("CommissionService.getCommissionsBySupplier", () => {
       status: "confirmed",
     });
 
-    // eq is called for supplier_id and status
     const eqCalls = fetchChain.eq.mock.calls as Array<[string, string]>;
     expect(eqCalls).toContainEqual(["supplier_id", SUPPLIER_1]);
     expect(eqCalls).toContainEqual(["status", "confirmed"]);
