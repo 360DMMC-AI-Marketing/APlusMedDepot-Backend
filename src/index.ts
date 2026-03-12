@@ -41,6 +41,7 @@ import userProfileRoutes from "./routes/userProfile.routes";
 import bulkImportRoutes from "./routes/bulkImport.routes";
 import paypalRoutes from "./routes/paypal.routes";
 import creditRoutes from "./routes/credit.routes";
+import aiVerificationRoutes from "./routes/aiVerification.routes";
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.use("/api/suppliers", supplierRoutes);
 app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin/products", adminProductRoutes);
+app.use("/api/admin/vendors", aiVerificationRoutes);
 app.use("/api/admin/suppliers", adminSupplierRoutes);
 app.use("/api/admin/payouts", adminPayoutRouter);
 app.use("/api/admin/analytics", platformAnalyticsRoutes);
