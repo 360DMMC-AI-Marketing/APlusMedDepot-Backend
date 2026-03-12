@@ -37,6 +37,11 @@ import adminDashboardRoutes from "./routes/adminDashboard.routes";
 import commissionReportRoutes from "./routes/commissionReport.routes";
 import { notificationUserRouter, notificationAdminRouter } from "./routes/notification.routes";
 import auditLogRoutes from "./routes/auditLog.routes";
+import userProfileRoutes from "./routes/userProfile.routes";
+import bulkImportRoutes from "./routes/bulkImport.routes";
+import paypalRoutes from "./routes/paypal.routes";
+import creditRoutes from "./routes/credit.routes";
+import aiVerificationRoutes from "./routes/aiVerification.routes";
 
 const app = express();
 
@@ -70,13 +75,17 @@ const swaggerSpec = swaggerJsdoc({
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Routes
+app.use("/api/users", userProfileRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api", creditRoutes);
+app.use("/api/payments/paypal", paypalRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/suppliers/analytics", supplierAnalyticsRoutes);
 app.use("/api/suppliers/inventory", supplierInventoryRoutes);
+app.use("/api/suppliers/products/bulk-import", bulkImportRoutes);
 app.use("/api/suppliers/products", supplierProductRoutes);
 app.use("/api/suppliers/me/orders", supplierOrderRoutes);
 app.use("/api/suppliers/me/payouts", supplierPayoutRouter);
@@ -84,6 +93,7 @@ app.use("/api/suppliers", supplierRoutes);
 app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin/products", adminProductRoutes);
+app.use("/api/admin/vendors", aiVerificationRoutes);
 app.use("/api/admin/suppliers", adminSupplierRoutes);
 app.use("/api/admin/payouts", adminPayoutRouter);
 app.use("/api/admin/analytics", platformAnalyticsRoutes);

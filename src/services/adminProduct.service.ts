@@ -18,6 +18,7 @@ interface ProductRow {
   description: string | null;
   sku: string;
   price: string;
+  original_price: string | null;
   stock_quantity: number;
   category: string | null;
   status: string;
@@ -62,6 +63,7 @@ export interface ProductReviewDetail {
   description: string | null;
   sku: string;
   price: number;
+  original_price: number | null;
   stock_quantity: number;
   category: string | null;
   status: string;
@@ -93,7 +95,7 @@ export interface ReviewedProduct {
 }
 
 const PRODUCT_REVIEW_FIELDS =
-  "id, supplier_id, name, description, sku, price, stock_quantity, category, status, images, specifications, weight, dimensions, is_deleted, reviewed_by, reviewed_at, admin_feedback, created_at, updated_at";
+  "id, supplier_id, name, description, sku, price, original_price, stock_quantity, category, status, images, specifications, weight, dimensions, is_deleted, reviewed_by, reviewed_at, admin_feedback, created_at, updated_at";
 
 export class AdminProductService {
   /**
@@ -221,6 +223,7 @@ export class AdminProductService {
       description: row.description,
       sku: row.sku,
       price: Number(row.price),
+      original_price: row.original_price ? Number(row.original_price) : null,
       stock_quantity: row.stock_quantity,
       category: row.category,
       status: row.status,
@@ -499,7 +502,7 @@ export class AdminProductService {
     let query = supabaseAdmin
       .from("products")
       .select(
-        "id, name, sku, price, stock_quantity, category, status, supplier_id, is_featured, created_at, suppliers(business_name)",
+        "id, name, sku, price, original_price, stock_quantity, category, status, supplier_id, is_featured, created_at, suppliers(business_name)",
         { count: "exact" },
       )
       .eq("is_deleted", false);
@@ -532,6 +535,7 @@ export class AdminProductService {
       name: string;
       sku: string;
       price: string;
+      original_price: string | null;
       stock_quantity: number;
       category: string | null;
       status: string;
@@ -549,6 +553,7 @@ export class AdminProductService {
       name: row.name,
       sku: row.sku,
       price: Number(row.price),
+      originalPrice: row.original_price ? Number(row.original_price) : null,
       stockQuantity: row.stock_quantity,
       category: row.category,
       status: row.status,
@@ -625,6 +630,7 @@ export class AdminProductService {
       description: product.description,
       sku: product.sku,
       price: Number(product.price),
+      originalPrice: product.original_price ? Number(product.original_price) : null,
       stockQuantity: product.stock_quantity,
       category: product.category,
       status: product.status,

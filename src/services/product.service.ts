@@ -16,6 +16,7 @@ type ProductRow = {
   description: string | null;
   sku: string;
   price: string;
+  original_price: string | null;
   stock_quantity: number;
   category: string | null;
   status: string;
@@ -30,7 +31,7 @@ type ProductRow = {
 };
 
 const PRODUCT_SELECT_FIELDS =
-  "id, supplier_id, name, description, sku, price, stock_quantity, category, status, images, specifications, weight, dimensions, is_deleted, created_at, updated_at";
+  "id, supplier_id, name, description, sku, price, original_price, stock_quantity, category, status, images, specifications, weight, dimensions, is_deleted, created_at, updated_at";
 
 const PRODUCT_WITH_SUPPLIER = `${PRODUCT_SELECT_FIELDS}, suppliers(business_name)`;
 
@@ -41,6 +42,7 @@ const toProduct = (row: ProductRow): Product => ({
   description: row.description,
   sku: row.sku,
   price: Number(row.price),
+  originalPrice: row.original_price ? Number(row.original_price) : null,
   stockQuantity: row.stock_quantity,
   category: row.category,
   status: row.status as ProductStatus,
@@ -192,6 +194,7 @@ export class ProductService {
         description: input.description ?? null,
         sku: input.sku,
         price: input.price,
+        original_price: input.originalPrice ?? null,
         stock_quantity: input.stockQuantity,
         category: input.category ?? null,
         status: input.status ?? "draft",
@@ -245,6 +248,7 @@ export class ProductService {
     if (input.description !== undefined) updateData.description = input.description;
     if (input.sku !== undefined) updateData.sku = input.sku;
     if (input.price !== undefined) updateData.price = input.price;
+    if (input.originalPrice !== undefined) updateData.original_price = input.originalPrice;
     if (input.stockQuantity !== undefined) updateData.stock_quantity = input.stockQuantity;
     if (input.category !== undefined) updateData.category = input.category;
     if (input.status !== undefined) updateData.status = input.status;

@@ -18,6 +18,7 @@ export interface SupplierProduct {
   description: string | null;
   sku: string;
   price: number;
+  originalPrice: number | null;
   stockQuantity: number;
   category: string | null;
   status: SupplierProductStatus;
@@ -57,6 +58,7 @@ export interface CreateSupplierProductRequest {
   description?: string;
   sku: string;
   price: number;
+  original_price?: number | null;
   stock_quantity: number;
   category?: string;
   specifications?: Record<string, string>;
@@ -69,6 +71,7 @@ export interface UpdateSupplierProductRequest {
   description?: string;
   sku?: string;
   price?: number;
+  original_price?: number | null;
   stock_quantity?: number;
   category?: string;
   specifications?: Record<string, string>;

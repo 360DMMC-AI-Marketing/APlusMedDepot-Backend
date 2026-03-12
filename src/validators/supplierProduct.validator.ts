@@ -51,6 +51,7 @@ export const createSupplierProductSchema = z.object({
   description: z.string().max(5000, "Description must be 5000 characters or less").optional(),
   sku: skuSchema,
   price: priceSchema,
+  original_price: z.number().positive("Original price must be positive").optional().nullable(),
   stock_quantity: z
     .number()
     .int("Stock quantity must be an integer")
@@ -68,6 +69,7 @@ export const updateSupplierProductSchema = z.object({
   description: z.string().max(5000).optional(),
   sku: skuSchema.optional(),
   price: priceSchema.optional(),
+  original_price: z.number().positive().optional().nullable(),
   stock_quantity: z.number().int().nonnegative().optional(),
   category: z.string().optional(),
   specifications: z.record(z.string(), z.string()).optional(),

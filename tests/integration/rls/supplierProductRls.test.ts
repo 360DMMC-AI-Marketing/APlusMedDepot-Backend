@@ -22,16 +22,19 @@ import { supabaseAdmin } from "../../../src/config/supabase";
 import env from "../../../src/config/env";
 
 // ---------------------------------------------------------------------------
-// Skip guard — tests require a real Supabase project
+// Skip guard — tests require a real, reachable Supabase project.
+// Set RUN_RLS_TESTS=true to opt in explicitly.
 // ---------------------------------------------------------------------------
 const isTestPlaceholder =
   env.SUPABASE_URL.includes("test.supabase.co") || env.SUPABASE_URL.includes("localhost");
-const describeOrSkip = isTestPlaceholder ? describe.skip : describe;
+const isOptedIn = process.env.RUN_RLS_TESTS === "true";
+const shouldSkip = isTestPlaceholder || !isOptedIn;
+const describeOrSkip = shouldSkip ? describe.skip : describe;
 
-if (isTestPlaceholder) {
+if (shouldSkip) {
   console.log(
-    "\n⚠️  Supplier Product RLS tests skipped — requires real Supabase instance.\n" +
-      "   Set SUPABASE_URL to a real project URL to run these tests.\n",
+    "\n⚠️  Supplier Product RLS tests skipped — requires a real, reachable Supabase instance.\n" +
+      "   Set RUN_RLS_TESTS=true to run these tests.\n",
   );
 }
 

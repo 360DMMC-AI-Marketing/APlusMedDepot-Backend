@@ -276,7 +276,9 @@ describe("Admin User Management API", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe("User approved successfully");
-      expect(mockApproveUser).toHaveBeenCalledWith(USER_ID, ADMIN_USER_ID, expect.anything());
+      expect(mockApproveUser).toHaveBeenCalledWith(USER_ID, ADMIN_USER_ID, expect.anything(), {
+        commissionRate: undefined,
+      });
     });
 
     it("returns 409 when user is not pending", async () => {

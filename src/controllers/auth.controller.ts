@@ -7,6 +7,8 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   refreshTokenSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
 } from "../validators/auth.validator";
 import { unauthorized } from "../utils/errors";
 
@@ -117,5 +119,23 @@ export class AuthController {
     await AuthService.updatePasswordWithToken(validated.token, validated.newPassword);
 
     res.status(200).json({ message: "Password has been reset successfully." });
+  }
+
+  static async verifyEmail(req: Request, res: Response): Promise<void> {
+    const validated = verifyEmailSchema.parse(req.body);
+
+    await AuthService.verifyEmail(validated.token);
+
+    res.status(200).json({ message: "Email verified successfully." });
+  }
+
+  static async resendVerification(req: Request, res: Response): Promise<void> {
+    const validated = resendVerificationSchema.parse(req.body);
+
+    await AuthService.resendVerification(validated.email);
+
+    res.status(200).json({
+      message: "If the email is registered and unverified, a verification link has been sent.",
+    });
   }
 }
