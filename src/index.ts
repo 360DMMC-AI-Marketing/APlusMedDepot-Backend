@@ -37,6 +37,7 @@ import adminDashboardRoutes from "./routes/adminDashboard.routes";
 import commissionReportRoutes from "./routes/commissionReport.routes";
 import { notificationUserRouter, notificationAdminRouter } from "./routes/notification.routes";
 import auditLogRoutes from "./routes/auditLog.routes";
+import userProfileRoutes from "./routes/userProfile.routes";
 
 const app = express();
 
@@ -70,6 +71,7 @@ const swaggerSpec = swaggerJsdoc({
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Routes
+app.use("/api/users", userProfileRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
