@@ -22,6 +22,10 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_TOLERANCE: z.coerce.number().default(300),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
+  PAYPAL_CLIENT_ID: z.string().default(""),
+  PAYPAL_CLIENT_SECRET: z.string().default(""),
+  ANTHROPIC_API_KEY: z.string().default(""),
+  FRONTEND_URL: z.string().default("http://localhost:5173"),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

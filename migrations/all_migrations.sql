@@ -1250,3 +1250,150 @@ ALTER TABLE commissions ADD COLUMN IF NOT EXISTS order_id UUID REFERENCES orders
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_status_check;
 ALTER TABLE orders ADD CONSTRAINT orders_payment_status_check
   CHECK (payment_status IN ('pending','processing','paid','failed','refunded','partially_refunded'));
+
+-- ============================================
+-- MIGRATION: 021_commission_functions.sql
+-- ============================================
+-- 021_commission_functions.sql
+-- Add 'reversed' status to commissions and create atomic balance update function
+
+-- 1. Extend commissions status constraint to include 'reversed'
+ALTER TABLE commissions DROP CONSTRAINT IF EXISTS commissions_status_check;
+ALTER TABLE commissions ADD CONSTRAINT commissions_status_check
+  CHECK (status IN ('pending', 'confirmed', 'paid', 'cancelled', 'reversed'));
+
+-- 2. Atomic supplier balance increment/decrement function
+--    Positive amount = credit (commission earned)
+--    Negative amount = debit (commission reversed)
+--    GREATEST prevents balance going below 0
+CREATE OR REPLACE FUNCTION increment_supplier_balance(
+  p_supplier_id UUID,
+  p_amount NUMERIC(12,2)
+) RETURNS NUMERIC(12,2) AS $$
+DECLARE
+  new_balance NUMERIC(12,2);
+BEGIN
+  UPDATE suppliers
+  SET current_balance = GREATEST(current_balance + p_amount, 0)
+  WHERE id = p_supplier_id
+  RETURNING current_balance INTO new_balance;
+  RETURN new_balance;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- MIGRATION: 022_add_rejected_user_status.sql
+-- ============================================
+-- ============================================
+-- Migration 022: Add 'rejected' to users status constraint
+-- ============================================
+-- Extend users.status CHECK to include 'rejected' for admin user management.
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check;
+ALTER TABLE users
+  ADD CONSTRAINT users_status_check
+  CHECK (status IN ('pending', 'approved', 'suspended', 'rejected'));
+
+-- ============================================
+-- MIGRATION: 023_admin_product_fields.sql
+-- ============================================
+-- ============================================================
+-- Migration 023: Admin Product Fields
+-- ============================================================
+-- Adds is_featured column and indexes for admin product management.
+-- ============================================================
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS idx_products_is_featured ON products(is_featured) WHERE is_featured = true;
+CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
+
+-- ============================================
+-- MIGRATION: 024_create_notifications.sql
+-- ============================================
+-- ============================================================
+-- Migration 024: Create Notifications Table
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  data JSONB DEFAULT '{}',
+  read BOOLEAN DEFAULT false,
+  email_sent BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, read) WHERE read = false;
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY notifications_own ON notifications
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid());
+
+CREATE POLICY notifications_service ON notifications
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- ============================================
+-- MIGRATION: 025_create_audit_logs.sql
+-- ============================================
+-- 025: Create audit_logs table for admin action tracking
+-- Stores a persistent, immutable trail of all admin actions
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id UUID NOT NULL REFERENCES users(id),
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT,
+  details JSONB DEFAULT '{}',
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ── Indexes ─────────────────────────────────────────────────────────────
+CREATE INDEX idx_audit_logs_admin_id ON audit_logs(admin_id);
+CREATE INDEX idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
+CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
+CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+
+-- ── RLS ─────────────────────────────────────────────────────────────────
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Only service_role can read/write audit logs (no user-level access)
+CREATE POLICY "service_role_full_access"
+  ON audit_logs
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- ============================================
+-- MIGRATION: 026_create_password_reset_tokens.sql
+-- ============================================
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX idx_password_reset_tokens_expires ON password_reset_tokens(expires_at);
+
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY password_reset_tokens_service_all ON password_reset_tokens
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
