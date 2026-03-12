@@ -40,6 +40,7 @@ import auditLogRoutes from "./routes/auditLog.routes";
 import userProfileRoutes from "./routes/userProfile.routes";
 import bulkImportRoutes from "./routes/bulkImport.routes";
 import paypalRoutes from "./routes/paypal.routes";
+import creditRoutes from "./routes/credit.routes";
 
 const app = express();
 
@@ -78,6 +79,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api", creditRoutes);
 app.use("/api/payments/paypal", paypalRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/suppliers/analytics", supplierAnalyticsRoutes);
