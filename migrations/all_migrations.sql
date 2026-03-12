@@ -1430,3 +1430,14 @@ CREATE POLICY email_verification_tokens_service_all ON email_verification_tokens
 -- original_price is nullable. null means no discount (regular price).
 -- When set, original_price is the "was" price and price is the current selling price.
 ALTER TABLE products ADD COLUMN IF NOT EXISTS original_price NUMERIC(10,2) DEFAULT NULL;
+
+-- ============================================
+-- MIGRATION: 029_add_paypal_fields.sql
+-- ============================================
+-- Add PayPal support fields to orders table
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS paypal_order_id VARCHAR(255) DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_paypal_order_id ON orders(paypal_order_id)
+  WHERE paypal_order_id IS NOT NULL;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) DEFAULT NULL;
+-- Values: 'stripe', 'paypal', 'net30'

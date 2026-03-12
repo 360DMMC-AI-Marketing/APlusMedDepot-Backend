@@ -24,6 +24,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   PAYPAL_CLIENT_ID: z.string().default(""),
   PAYPAL_CLIENT_SECRET: z.string().default(""),
+  PAYPAL_MODE: z.enum(["sandbox", "live"]).default("sandbox"),
   ANTHROPIC_API_KEY: z.string().default(""),
   FRONTEND_URL: z.string().default("http://localhost:5173"),
 });
