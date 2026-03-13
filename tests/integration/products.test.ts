@@ -168,11 +168,13 @@ describe("GET /api/products", () => {
     );
   });
 
-  it("returns 401 without auth token", async () => {
+  it("returns 200 without auth token (public catalog)", async () => {
+    mockList.mockResolvedValue(paginatedResponse);
+
     const res = await request(app).get("/api/products");
 
-    expect(res.status).toBe(401);
-    expect(mockList).not.toHaveBeenCalled();
+    // Product listing is public — no auth required
+    expect(res.status).toBe(200);
   });
 });
 

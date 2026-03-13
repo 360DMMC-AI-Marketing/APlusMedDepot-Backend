@@ -15,7 +15,7 @@ export class ProductController {
   static async list(req: Request, res: Response): Promise<void> {
     const query = productQuerySchema.parse(req.query);
 
-    if (!query.status && req.user!.role !== "admin") {
+    if (!query.status && req.user?.role !== "admin") {
       query.status = "active";
     }
 

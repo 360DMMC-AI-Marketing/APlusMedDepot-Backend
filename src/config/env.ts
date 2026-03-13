@@ -27,6 +27,7 @@ const envSchema = z.object({
   PAYPAL_MODE: z.enum(["sandbox", "live"]).default("sandbox"),
   ANTHROPIC_API_KEY: z.string().default(""),
   FRONTEND_URL: z.string().default("http://localhost:5173"),
+  CORS_ORIGIN: z.string().default("http://localhost:5173"),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

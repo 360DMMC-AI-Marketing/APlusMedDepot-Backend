@@ -73,7 +73,7 @@ const router = Router();
  *       401:
  *         description: Unauthorized
  */
-router.get("/", authenticate, ProductController.list);
+router.get("/", ProductController.list);
 
 /**
  * @openapi
@@ -120,7 +120,7 @@ router.get("/", authenticate, ProductController.list);
  *       401:
  *         description: Unauthorized
  */
-router.get("/search", authenticate, ProductController.search);
+router.get("/search", ProductController.search);
 
 /**
  * @openapi
@@ -186,7 +186,7 @@ router.get("/:id/stock", async (req: Request, res: Response) => {
  *       404:
  *         description: Product not found
  */
-router.get("/:id", authenticate, ProductController.getById);
+router.get("/:id", ProductController.getById);
 
 /**
  * @openapi
@@ -441,7 +441,7 @@ router.get("/:id/reviews", (_req: Request, res: Response) => {
   res.status(200).json({ message: "TODO: Get reviews for a product" });
 });
 
-router.post("/:id/reviews", (_req: Request, res: Response) => {
+router.post("/:id/reviews", authenticate, (_req: Request, res: Response) => {
   res.status(200).json({ message: "TODO: Add a review for a product" });
 });
 

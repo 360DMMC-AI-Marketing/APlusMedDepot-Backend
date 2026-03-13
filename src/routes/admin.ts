@@ -1,6 +1,13 @@
 import { Router, Request, Response } from "express";
 
+import { authenticate } from "../middleware/auth";
+import { authorize } from "../middleware/rbac";
+
 const router = Router();
+
+// All routes require admin authentication
+router.use(authenticate);
+router.use(authorize("admin"));
 
 router.get("/users", (_req: Request, res: Response) => {
   res.status(200).json({ message: "TODO: List all users (admin only)" });
