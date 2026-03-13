@@ -198,37 +198,50 @@ export async function getSubOrders(masterOrderId: string): Promise<SubOrder[]> {
     return [];
   }
 
-  const subOrders: SubOrder[] = [];
+  // Batch fetch all items and supplier names (2 queries instead of 2N)
+  const supplierIds = [...new Set(rows.map((r) => r.supplier_id))];
 
-  for (const row of rows) {
-    // Fetch items from master order for this supplier
-    const { data: itemsData } = await supabaseAdmin
+  const [allItemsResult, suppliersResult] = await Promise.all([
+    supabaseAdmin
       .from("order_items")
-      .select("id, product_id, quantity, unit_price, subtotal")
-      .eq("order_id", masterOrderId)
-      .eq("supplier_id", row.supplier_id);
+      .select("id, product_id, supplier_id, quantity, unit_price, subtotal")
+      .eq("order_id", masterOrderId),
+    supabaseAdmin.from("suppliers").select("id, business_name").in("id", supplierIds),
+  ]);
 
-    const items = (itemsData ?? []) as unknown as ItemRow[];
+  // Group items by supplier_id
+  type ItemWithSupplier = ItemRow & { supplier_id: string };
+  const allItems = (allItemsResult.data ?? []) as unknown as ItemWithSupplier[];
+  const itemsBySupplier = new Map<string, ItemWithSupplier[]>();
+  for (const item of allItems) {
+    const existing = itemsBySupplier.get(item.supplier_id);
+    if (existing) {
+      existing.push(item);
+    } else {
+      itemsBySupplier.set(item.supplier_id, [item]);
+    }
+  }
 
-    // Fetch supplier name
-    const { data: supplierData } = await supabaseAdmin
-      .from("suppliers")
-      .select("business_name")
-      .eq("id", row.supplier_id)
-      .single();
+  // Build supplier name lookup
+  type SupplierRow = { id: string; business_name: string };
+  const suppliers = (suppliersResult.data ?? []) as unknown as SupplierRow[];
+  const supplierNameMap = new Map<string, string>();
+  for (const s of suppliers) {
+    supplierNameMap.set(s.id, s.business_name);
+  }
 
-    const supplier = supplierData as unknown as { business_name: string } | null;
-
+  const subOrders: SubOrder[] = rows.map((row) => {
+    const items = itemsBySupplier.get(row.supplier_id) ?? [];
     const totalAmount = Number(row.total_amount);
     const taxAmount = Number(row.tax_amount);
     const subtotal = Math.round((totalAmount - taxAmount) * 100) / 100;
 
-    subOrders.push({
+    return {
       id: row.id,
       orderNumber: row.order_number,
       masterOrderId,
       supplierId: row.supplier_id,
-      supplierName: supplier?.business_name ?? "Unknown",
+      supplierName: supplierNameMap.get(row.supplier_id) ?? "Unknown",
       totalAmount,
       taxAmount,
       subtotal,
@@ -241,8 +254,8 @@ export async function getSubOrders(masterOrderId: string): Promise<SubOrder[]> {
         subtotal: Number(item.subtotal),
       })),
       createdAt: row.created_at,
-    });
-  }
+    };
+  });
 
   return subOrders;
 }
@@ -270,23 +283,19 @@ export async function getSupplierSubOrder(
 
   const row = subOrderData as unknown as SubOrderDbRow;
 
-  // Fetch items from master order for this supplier
-  const { data: itemsData } = await supabaseAdmin
-    .from("order_items")
-    .select("id, product_id, quantity, unit_price, subtotal")
-    .eq("order_id", masterOrderId)
-    .eq("supplier_id", supplierId);
+  // Fetch items and supplier name in parallel (2 concurrent queries instead of sequential)
+  const [itemsResult, supplierResult] = await Promise.all([
+    supabaseAdmin
+      .from("order_items")
+      .select("id, product_id, quantity, unit_price, subtotal")
+      .eq("order_id", masterOrderId)
+      .eq("supplier_id", supplierId),
+    supabaseAdmin.from("suppliers").select("business_name").eq("id", supplierId).single(),
+  ]);
 
-  const items = (itemsData ?? []) as unknown as ItemRow[];
+  const items = (itemsResult.data ?? []) as unknown as ItemRow[];
 
-  // Fetch supplier name
-  const { data: supplierData } = await supabaseAdmin
-    .from("suppliers")
-    .select("business_name")
-    .eq("id", supplierId)
-    .single();
-
-  const supplier = supplierData as unknown as { business_name: string } | null;
+  const supplier = supplierResult.data as unknown as { business_name: string } | null;
 
   const totalAmount = Number(row.total_amount);
   const taxAmount = Number(row.tax_amount);

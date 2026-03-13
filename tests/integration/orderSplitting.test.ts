@@ -439,28 +439,40 @@ describe("Order Splitting — Integration", () => {
 
       const subOrdersChain = mockQuery({ data: subOrderRows });
 
-      // Sub-order 1: items + supplier
-      const items1Chain = mockQuery({
+      // Batch fetch: all items for the master order
+      const allItemsChain = mockQuery({
         data: [
-          { id: "oi-1", product_id: "prod-1", quantity: 2, unit_price: "25.00", subtotal: "50.00" },
+          {
+            id: "oi-1",
+            product_id: "prod-1",
+            supplier_id: SUPPLIER_A,
+            quantity: 2,
+            unit_price: "25.00",
+            subtotal: "50.00",
+          },
+          {
+            id: "oi-2",
+            product_id: "prod-2",
+            supplier_id: SUPPLIER_B,
+            quantity: 3,
+            unit_price: "20.00",
+            subtotal: "60.00",
+          },
         ],
       });
-      const supplier1Chain = mockQuery({ data: { business_name: "MedSupply A" } });
 
-      // Sub-order 2: items + supplier
-      const items2Chain = mockQuery({
+      // Batch fetch: all suppliers
+      const allSuppliersChain = mockQuery({
         data: [
-          { id: "oi-2", product_id: "prod-2", quantity: 3, unit_price: "20.00", subtotal: "60.00" },
+          { id: SUPPLIER_A, business_name: "MedSupply A" },
+          { id: SUPPLIER_B, business_name: "MedSupply B" },
         ],
       });
-      const supplier2Chain = mockQuery({ data: { business_name: "MedSupply B" } });
 
       mockFrom
         .mockReturnValueOnce(subOrdersChain)
-        .mockReturnValueOnce(items1Chain)
-        .mockReturnValueOnce(supplier1Chain)
-        .mockReturnValueOnce(items2Chain)
-        .mockReturnValueOnce(supplier2Chain);
+        .mockReturnValueOnce(allItemsChain)
+        .mockReturnValueOnce(allSuppliersChain);
 
       const result = await getSubOrders(MASTER_ORDER_ID);
 

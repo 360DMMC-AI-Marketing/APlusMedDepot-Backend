@@ -487,44 +487,40 @@ describe("getSubOrders", () => {
 
     const subOrdersChain = mockQuery({ data: subOrderRows });
 
-    // Sub-order 1: items + supplier
-    const items1Chain = mockQuery({
+    // Batch fetch: all items for the master order
+    const allItemsChain = mockQuery({
       data: [
         {
           id: "oi-1",
           product_id: "prod-1",
+          supplier_id: SUPPLIER_1,
           quantity: 2,
           unit_price: "15.00",
           subtotal: "30.00",
         },
-      ],
-    });
-    const supplier1Chain = mockQuery({
-      data: { business_name: "Supplier A" },
-    });
-
-    // Sub-order 2: items + supplier
-    const items2Chain = mockQuery({
-      data: [
         {
           id: "oi-2",
           product_id: "prod-2",
+          supplier_id: SUPPLIER_2,
           quantity: 1,
           unit_price: "20.00",
           subtotal: "20.00",
         },
       ],
     });
-    const supplier2Chain = mockQuery({
-      data: { business_name: "Supplier B" },
+
+    // Batch fetch: all suppliers
+    const allSuppliersChain = mockQuery({
+      data: [
+        { id: SUPPLIER_1, business_name: "Supplier A" },
+        { id: SUPPLIER_2, business_name: "Supplier B" },
+      ],
     });
 
     mockFrom
       .mockReturnValueOnce(subOrdersChain)
-      .mockReturnValueOnce(items1Chain)
-      .mockReturnValueOnce(supplier1Chain)
-      .mockReturnValueOnce(items2Chain)
-      .mockReturnValueOnce(supplier2Chain);
+      .mockReturnValueOnce(allItemsChain)
+      .mockReturnValueOnce(allSuppliersChain);
 
     const result = await getSubOrders(MASTER_ORDER_ID);
 

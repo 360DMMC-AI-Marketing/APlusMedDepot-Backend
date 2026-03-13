@@ -105,32 +105,54 @@ export class SupplierOrderService {
     const rows = (data ?? []) as unknown as SubOrderRow[];
     const total = count ?? 0;
 
-    // Enrich with customer names and item counts
-    const views: SupplierOrderView[] = [];
+    // Batch fetch customer names and item counts (2 queries instead of 2N)
+    const customerIds = [...new Set(rows.map((r) => r.customer_id))];
+    const parentOrderIds = [...new Set(rows.map((r) => r.parent_order_id))];
 
-    for (const row of rows) {
-      // Fetch item count for this supplier on the master order
-      const { data: itemsData } = await supabaseAdmin
+    const [customersResult, itemsResult] = await Promise.all([
+      supabaseAdmin.from("users").select("id, first_name, last_name, email").in("id", customerIds),
+      supabaseAdmin
         .from("order_items")
-        .select("id")
-        .eq("order_id", row.parent_order_id)
-        .eq("supplier_id", supplierId);
+        .select("id, order_id")
+        .in("order_id", parentOrderIds)
+        .eq("supplier_id", supplierId),
+    ]);
 
-      const itemCount = (itemsData ?? []).length;
+    // Build customer name lookup
+    type CustomerRow = {
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+      email: string;
+    };
+    const customers = (customersResult.data ?? []) as unknown as CustomerRow[];
+    const customerNameMap = new Map<string, string>();
+    for (const c of customers) {
+      customerNameMap.set(
+        c.id,
+        c.first_name && c.last_name ? `${c.first_name} ${c.last_name}` : c.email,
+      );
+    }
 
-      // Fetch customer name
-      const customerName = await this.getCustomerName(row.customer_id);
+    // Build item count lookup by parent_order_id
+    type ItemIdRow = { id: string; order_id: string };
+    const allItems = (itemsResult.data ?? []) as unknown as ItemIdRow[];
+    const itemCountMap = new Map<string, number>();
+    for (const item of allItems) {
+      itemCountMap.set(item.order_id, (itemCountMap.get(item.order_id) ?? 0) + 1);
+    }
 
+    const views: SupplierOrderView[] = rows.map((row) => {
       const totalAmount = Number(row.total_amount);
       const commissionAmount = Math.round(totalAmount * rate * 100) / 100;
       const payoutAmount = Math.round((totalAmount - commissionAmount) * 100) / 100;
 
-      views.push({
+      return {
         id: row.id,
         orderNumber: row.order_number,
         masterOrderId: row.parent_order_id,
         customerId: row.customer_id,
-        customerName,
+        customerName: customerNameMap.get(row.customer_id) ?? "Unknown",
         totalAmount,
         taxAmount: Number(row.tax_amount),
         commissionAmount,
@@ -138,10 +160,10 @@ export class SupplierOrderService {
         commissionRate,
         status: row.status,
         paymentStatus: row.payment_status,
-        itemCount,
+        itemCount: itemCountMap.get(row.parent_order_id) ?? 0,
         createdAt: row.created_at,
-      });
-    }
+      };
+    });
 
     return { data: views, total };
   }
@@ -317,10 +339,10 @@ export class SupplierOrderService {
     }
     revenueThisMonth = Math.round(revenueThisMonth * 100) / 100;
 
-    // Average order value (all time sub-orders)
+    // Average order value and status counts (single query instead of two)
     const { data: allOrdersData, error: allOrdersError } = await supabaseAdmin
       .from("orders")
-      .select("total_amount")
+      .select("total_amount, status")
       .eq("supplier_id", supplierId)
       .not("parent_order_id", "is", null);
 
@@ -328,29 +350,10 @@ export class SupplierOrderService {
       throw new Error(`Failed to fetch all orders: ${allOrdersError.message}`);
     }
 
-    type AmountRow = { total_amount: string };
-    const allRows = (allOrdersData ?? []) as unknown as AmountRow[];
+    type OrderRow = { total_amount: string; status: string };
+    const allRows = (allOrdersData ?? []) as unknown as OrderRow[];
+
     let totalAllOrders = 0;
-    for (const row of allRows) {
-      totalAllOrders += Number(row.total_amount);
-    }
-    const averageOrderValue =
-      allRows.length > 0 ? Math.round((totalAllOrders / allRows.length) * 100) / 100 : 0;
-
-    // Status counts
-    const { data: statusData, error: statusError } = await supabaseAdmin
-      .from("orders")
-      .select("status")
-      .eq("supplier_id", supplierId)
-      .not("parent_order_id", "is", null);
-
-    if (statusError) {
-      throw new Error(`Failed to fetch order statuses: ${statusError.message}`);
-    }
-
-    type StatusRow = { status: string };
-    const statusRows = (statusData ?? []) as unknown as StatusRow[];
-
     const statusCounts = {
       pending: 0,
       processing: 0,
@@ -358,7 +361,9 @@ export class SupplierOrderService {
       delivered: 0,
     };
 
-    for (const row of statusRows) {
+    for (const row of allRows) {
+      totalAllOrders += Number(row.total_amount);
+
       if (row.status === "pending_payment" || row.status === "payment_processing") {
         statusCounts.pending++;
       } else if (row.status === "payment_confirmed" || row.status === "awaiting_fulfillment") {
@@ -369,6 +374,9 @@ export class SupplierOrderService {
         statusCounts.delivered++;
       }
     }
+
+    const averageOrderValue =
+      allRows.length > 0 ? Math.round((totalAllOrders / allRows.length) * 100) / 100 : 0;
 
     return {
       ordersThisMonth,
