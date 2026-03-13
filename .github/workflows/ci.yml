@@ -40,16 +40,18 @@ jobs:
     needs: [build]
     env:
       NODE_ENV: test
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-      PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
-      PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-role-key' }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY || 'sk_test_placeholder_key_for_ci' }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET || 'whsec_placeholder_secret_for_ci' }}
+      PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID || 'placeholder' }}
+      PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET || 'placeholder' }}
       PAYPAL_MODE: sandbox
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'placeholder' }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || 'placeholder' }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-placeholder-jwt-secret-that-is-at-least-32-chars-long' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://placeholder:placeholder@localhost:5432/placeholder' }}
       FRONTEND_URL: http://localhost:5173
     steps:
       - uses: actions/checkout@v4
