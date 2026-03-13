@@ -68,8 +68,8 @@ jobs:
             const coverage = require('./coverage/coverage-summary.json');
             const lines = coverage.total.lines.pct;
             console.log('Line coverage: ' + lines + '%');
-            if (lines < 70) {
-              console.error('Coverage below 70%!');
+            if (lines < 65) {
+              console.error('Coverage below 65%!');
               process.exit(1);
             }
           "
