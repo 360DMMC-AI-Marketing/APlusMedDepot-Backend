@@ -74,6 +74,15 @@ const swaggerSpec = swaggerJsdoc({
       description: "Multi-vendor medical supplies marketplace API",
     },
     servers: [{ url: "/api" }],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
   },
   apis: ["./src/routes/*.ts"],
 });
