@@ -87,6 +87,7 @@ const swaggerSpec = swaggerJsdoc({
   apis: ["./src/routes/*.ts"],
 });
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get("/api-docs.json", (_req, res) => res.json(swaggerSpec));
 
 // Routes
 app.use("/api/users", userProfileRoutes);

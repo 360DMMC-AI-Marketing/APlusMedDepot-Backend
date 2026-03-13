@@ -1,0 +1,7051 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "APlusMedDepot API",
+    "version": "0.1.0",
+    "description": "Multi-vendor medical supplies marketplace API"
+  },
+  "servers": [
+    {
+      "url": "/api"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/admin/users": {
+      "get": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "List all users",
+        "description": "Returns a paginated list of all users with filtering options. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated user list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/admin/users/{id}/role": {
+      "put": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "Update user role (stub)",
+        "description": "Update a user's role. Admin only. Currently a TODO stub.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/status": {
+      "put": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "Enable/disable user account (stub)",
+        "description": "Enable or disable a user account. Admin only. Currently a TODO stub.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/orders": {
+      "get": {
+        "tags": [
+          "Admin - Orders"
+        ],
+        "summary": "List all orders",
+        "description": "Returns a paginated list of all orders with filtering options. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated order list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/admin/suppliers/pending": {
+      "get": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "List pending supplier applications (stub)",
+        "description": "Returns pending supplier applications. Admin only. Currently a TODO stub.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{id}/approve": {
+      "put": {
+        "tags": [
+          "Admin - Suppliers"
+        ],
+        "summary": "Approve supplier application",
+        "description": "Approve a supplier application. Admin only. Currently a TODO stub.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supplier approved"
+          },
+          "400": {
+            "description": "Invalid status transition"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Supplier not found"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "commissionRate": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "description": "Optional custom commission rate (default 15%)"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/analytics": {
+      "get": {
+        "tags": [
+          "Admin - Analytics"
+        ],
+        "summary": "Get platform-wide analytics (stub)",
+        "description": "Returns platform-wide analytics. Admin only. Currently a TODO stub.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/dashboard": {
+      "get": {
+        "summary": "Admin dashboard summary",
+        "description": "Returns aggregated data for the admin dashboard including pending actions, revenue, orders, and platform health.",
+        "tags": [
+          "Admin Dashboard"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard summary object"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not an admin"
+          }
+        }
+      }
+    },
+    "/admin/orders/search": {
+      "get": {
+        "tags": [
+          "Admin - Orders"
+        ],
+        "summary": "Search orders",
+        "description": "Search orders by various criteria. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching orders"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/orders/status-counts": {
+      "get": {
+        "tags": [
+          "Admin - Orders"
+        ],
+        "summary": "Get order status counts",
+        "description": "Returns aggregate counts of orders grouped by status. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status count breakdown"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/orders/{id}": {
+      "get": {
+        "tags": [
+          "Admin - Orders"
+        ],
+        "summary": "Get order details",
+        "description": "Returns full details of a specific order including items and sub-orders. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/admin/products": {
+      "get": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "List all products",
+        "description": "Returns a paginated list of all products with filtering. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated product list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/products/pending": {
+      "get": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "List pending products",
+        "description": "Returns paginated list of products awaiting admin approval. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending products list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/products/{id}": {
+      "get": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "Get product details",
+        "description": "Returns full product details including supplier info. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/admin/products/{id}/review": {
+      "get": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "Get product review details",
+        "description": "Returns full product detail with supplier info and review history. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product review details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/admin/products/{id}/approve": {
+      "put": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "Approve a product",
+        "description": "Approve a pending product, setting status to active. Sends email notification. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product approved"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/admin/products/{id}/request-changes": {
+      "put": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "Request changes on a product",
+        "description": "Request changes on a product, setting status to needs_revision. Sends email with feedback. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "feedback": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "feedback"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Changes requested"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/admin/products/{id}/reject": {
+      "put": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "Reject a product",
+        "description": "Reject a product, setting status to rejected. Sends email with reason. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Product rejected"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/admin/products/{id}/feature": {
+      "put": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "Feature a product",
+        "description": "Mark a product as featured. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product featured"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/admin/products/{id}/unfeature": {
+      "put": {
+        "tags": [
+          "Admin - Products"
+        ],
+        "summary": "Unfeature a product",
+        "description": "Remove featured status from a product. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product unfeatured"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/admin/suppliers": {
+      "get": {
+        "summary": "List all suppliers with filtering and pagination",
+        "tags": [
+          "Admin - Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "under_review",
+                "approved",
+                "rejected",
+                "needs_revision",
+                "suspended"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search by business name"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of suppliers"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - admin only"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/commissions": {
+      "get": {
+        "summary": "Get commission report with aggregates",
+        "tags": [
+          "Admin - Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "supplierId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Commission report with aggregates"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - admin only"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{id}": {
+      "get": {
+        "summary": "Get supplier details including documents",
+        "tags": [
+          "Admin - Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supplier details with documents"
+          },
+          "404": {
+            "description": "Supplier not found"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{id}/reject": {
+      "put": {
+        "summary": "Reject supplier application",
+        "tags": [
+          "Admin - Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rejectionReason"
+                ],
+                "properties": {
+                  "rejectionReason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Supplier rejected"
+          },
+          "400": {
+            "description": "Invalid status transition or missing rejection reason"
+          },
+          "404": {
+            "description": "Supplier not found"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{id}/request-revision": {
+      "put": {
+        "summary": "Request revision on supplier application",
+        "tags": [
+          "Admin - Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revision requested"
+          },
+          "400": {
+            "description": "Invalid status transition"
+          },
+          "404": {
+            "description": "Supplier not found"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{id}/review": {
+      "put": {
+        "summary": "Move supplier from pending to under review",
+        "tags": [
+          "Admin - Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supplier moved to under review"
+          },
+          "400": {
+            "description": "Invalid status transition"
+          },
+          "404": {
+            "description": "Supplier not found"
+          }
+        }
+      }
+    },
+    "/admin/users/pending-count": {
+      "get": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "Get pending user count",
+        "description": "Returns count of users pending approval. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending count"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}": {
+      "get": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "Get user details",
+        "description": "Returns full details for a specific user. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/approve": {
+      "put": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "Approve a user",
+        "description": "Approve a pending user account. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User approved"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/reject": {
+      "put": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "Reject a user",
+        "description": "Reject a pending user account. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User rejected"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/suspend": {
+      "put": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "Suspend a user",
+        "description": "Suspend an active user account. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User suspended"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/reactivate": {
+      "put": {
+        "tags": [
+          "Admin - Users"
+        ],
+        "summary": "Reactivate a user",
+        "description": "Reactivate a suspended user account. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User reactivated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/admin/vendors/{id}/ai-verify": {
+      "post": {
+        "summary": "Run AI-powered verification analysis on a vendor application",
+        "description": "Uses Claude AI to analyze vendor application data and return a risk assessment score, recommendation, and detailed checks. Admin only.\n",
+        "tags": [
+          "Admin - AI Verification"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Vendor (supplier) ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "score": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "recommendation": {
+                      "type": "string",
+                      "enum": [
+                        "approve",
+                        "review",
+                        "reject"
+                      ]
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "businessInfo": {
+                          "type": "object",
+                          "properties": {
+                            "passed": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "documentation": {
+                          "type": "object",
+                          "properties": {
+                            "passed": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "riskAssessment": {
+                          "type": "object",
+                          "properties": {
+                            "passed": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "missingItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "riskFactors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          },
+          "404": {
+            "description": "Vendor not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "502": {
+            "description": "AI service error"
+          },
+          "503": {
+            "description": "AI verification not configured"
+          }
+        }
+      }
+    },
+    "/admin/audit-logs": {
+      "get": {
+        "summary": "List audit logs with filtering and pagination",
+        "tags": [
+          "Audit Logs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resourceType",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "adminId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of audit logs"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/audit-logs/resource/{type}/{id}": {
+      "get": {
+        "summary": "Get audit logs for a specific resource",
+        "tags": [
+          "Audit Logs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "type",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit logs for the specified resource"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/audit-logs/admin/{adminId}": {
+      "get": {
+        "summary": "Get activity for a specific admin user",
+        "tags": [
+          "Audit Logs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "adminId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated admin activity logs"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new user",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "email",
+                      "password",
+                      "firstName",
+                      "lastName",
+                      "companyName",
+                      "role"
+                    ],
+                    "properties": {
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "password": {
+                        "type": "string",
+                        "minLength": 8,
+                        "description": "Must contain uppercase, lowercase, number, and special character"
+                      },
+                      "firstName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 50
+                      },
+                      "lastName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 50
+                      },
+                      "companyName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "phone": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "customer"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "email",
+                      "password",
+                      "firstName",
+                      "lastName",
+                      "role"
+                    ],
+                    "properties": {
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "password": {
+                        "type": "string",
+                        "minLength": 8
+                      },
+                      "firstName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 50
+                      },
+                      "lastName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 50
+                      },
+                      "phone": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "supplier"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registration successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "firstName": {
+                          "type": "string"
+                        },
+                        "lastName": {
+                          "type": "string"
+                        },
+                        "companyName": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "customer",
+                            "supplier"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Email already in use"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate user and return JWT",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "firstName": {
+                          "type": "string"
+                        },
+                        "lastName": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "customer",
+                            "supplier",
+                            "admin"
+                          ]
+                        },
+                        "status": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "session": {
+                      "type": "object",
+                      "properties": {
+                        "accessToken": {
+                          "type": "string"
+                        },
+                        "refreshToken": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "403": {
+            "description": "Account pending approval or suspended"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "summary": "Get current session info",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object"
+                    },
+                    "session": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Log out and invalidate session",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logged out successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Refresh access token",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "refreshToken"
+                ],
+                "properties": {
+                  "refreshToken": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": {
+                      "type": "object",
+                      "properties": {
+                        "accessToken": {
+                          "type": "string"
+                        },
+                        "refreshToken": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid refresh token"
+          }
+        }
+      }
+    },
+    "/auth/forgot-password": {
+      "post": {
+        "summary": "Request a password reset email",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Always returns 200 regardless of email existence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/auth/reset-password": {
+      "post": {
+        "summary": "Reset password with recovery token",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "newPassword"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 8,
+                    "description": "Must contain uppercase, lowercase, number, and special character"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Invalid or expired token"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/auth/verify-email": {
+      "post": {
+        "summary": "Verify email address with token",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email verified successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired token"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/auth/resend-verification": {
+      "post": {
+        "summary": "Resend email verification link",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification email sent (if applicable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email is already verified"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/suppliers/products/bulk-import": {
+      "post": {
+        "summary": "Bulk import products",
+        "tags": [
+          "Supplier Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "products"
+                ],
+                "properties": {
+                  "products": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "sku",
+                        "price",
+                        "stockQuantity",
+                        "category"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "sku": {
+                          "type": "string"
+                        },
+                        "price": {
+                          "type": "number"
+                        },
+                        "originalPrice": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "stockQuantity": {
+                          "type": "number"
+                        },
+                        "category": {
+                          "type": "string"
+                        },
+                        "specifications": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Import results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "imported": {
+                      "type": "number"
+                    },
+                    "failed": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "row": {
+                            "type": "number"
+                          },
+                          "sku": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not an approved supplier"
+          }
+        }
+      }
+    },
+    "/cart": {
+      "get": {
+        "summary": "Get current customer's cart",
+        "tags": [
+          "Cart"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cart with items and totals"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Clear entire cart",
+        "tags": [
+          "Cart"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cart cleared — returns empty cart structure"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer"
+          }
+        }
+      }
+    },
+    "/cart/validate": {
+      "get": {
+        "summary": "Validate cart items against current product state",
+        "tags": [
+          "Cart"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validation result with any issues found"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer"
+          }
+        }
+      }
+    },
+    "/cart/refresh": {
+      "post": {
+        "summary": "Auto-fix all stale cart items",
+        "tags": [
+          "Cart"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Refreshed cart with list of changes made"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer"
+          }
+        }
+      }
+    },
+    "/cart/items": {
+      "post": {
+        "summary": "Add item to cart",
+        "tags": [
+          "Cart"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "productId",
+                  "quantity"
+                ],
+                "properties": {
+                  "productId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Item added to cart"
+          },
+          "400": {
+            "description": "Validation error, out of stock, or product unavailable"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/cart/items/{id}": {
+      "put": {
+        "summary": "Update cart item quantity",
+        "tags": [
+          "Cart"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "quantity"
+                ],
+                "properties": {
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cart item updated"
+          },
+          "400": {
+            "description": "Validation error or insufficient stock"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer or not item owner"
+          },
+          "404": {
+            "description": "Cart item not found"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove item from cart",
+        "tags": [
+          "Cart"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Item removed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer or not item owner"
+          },
+          "404": {
+            "description": "Cart item not found"
+          }
+        }
+      }
+    },
+    "/checkout/validate": {
+      "post": {
+        "summary": "Validate cart and return order preview before payment",
+        "tags": [
+          "Checkout"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "shipping_address"
+                ],
+                "properties": {
+                  "shipping_address": {
+                    "type": "object",
+                    "required": [
+                      "street",
+                      "city",
+                      "state",
+                      "zip_code",
+                      "country"
+                    ],
+                    "properties": {
+                      "street": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "zip_code": {
+                        "type": "string",
+                        "pattern": "^\\d{5}(-\\d{4})?$"
+                      },
+                      "country": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validation result (valid or invalid with errors)"
+          },
+          "400": {
+            "description": "Malformed request body"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer"
+          }
+        }
+      }
+    },
+    "/suppliers/commissions": {
+      "get": {
+        "summary": "List own commissions",
+        "description": "Returns all commission records for the authenticated supplier, with optional date and status filters.",
+        "tags": [
+          "Commissions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Filter commissions created on or after this date"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Filter commissions created on or before this date"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "confirmed",
+                "paid",
+                "cancelled",
+                "reversed"
+              ]
+            },
+            "description": "Filter by commission status"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of commission records"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or supplier not approved"
+          }
+        }
+      }
+    },
+    "/suppliers/commissions/summary": {
+      "get": {
+        "summary": "Commission summary",
+        "description": "Returns aggregated totals (sales, commission, payout, balance, order count) for the authenticated supplier.",
+        "tags": [
+          "Commissions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Commission summary object"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or supplier not approved"
+          }
+        }
+      }
+    },
+    "/admin/commissions/order/{orderId}": {
+      "get": {
+        "summary": "View commissions for an order",
+        "description": "Admin endpoint to view all commission records for a specific order.",
+        "tags": [
+          "Admin Commissions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orderId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The order ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of commission records for the order"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not an admin"
+          }
+        }
+      }
+    },
+    "/admin/commissions/supplier/{supplierId}": {
+      "get": {
+        "summary": "View commissions for a supplier",
+        "description": "Admin endpoint to view all commission records for a specific supplier, with optional date and status filters.",
+        "tags": [
+          "Admin Commissions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supplierId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The supplier ID"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Filter commissions created on or after this date"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Filter commissions created on or before this date"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "confirmed",
+                "paid",
+                "cancelled",
+                "reversed"
+              ]
+            },
+            "description": "Filter by commission status"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of commission records for the supplier"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not an admin"
+          }
+        }
+      }
+    },
+    "/admin/commissions/earnings": {
+      "get": {
+        "summary": "Platform commission earnings",
+        "tags": [
+          "Admin Commissions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "week",
+                "month",
+                "quarter",
+                "year"
+              ],
+              "default": "month"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Platform earnings with trend data"
+          }
+        }
+      }
+    },
+    "/admin/commissions/by-supplier": {
+      "get": {
+        "summary": "Commission report by supplier",
+        "tags": [
+          "Admin Commissions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "startDate",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated supplier commission report"
+          }
+        }
+      }
+    },
+    "/admin/commissions/trend": {
+      "get": {
+        "summary": "Commission trend over time",
+        "tags": [
+          "Admin Commissions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "granularity",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "weekly",
+                "monthly"
+              ],
+              "default": "weekly"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of commission trend data points"
+          }
+        }
+      }
+    },
+    "/users/me/credit": {
+      "get": {
+        "summary": "Get current user's credit information",
+        "tags": [
+          "Credit"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credit information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "eligible": {
+                      "type": "boolean"
+                    },
+                    "limit": {
+                      "type": "number"
+                    },
+                    "used": {
+                      "type": "number"
+                    },
+                    "available": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/payments/net30": {
+      "post": {
+        "summary": "Place an order using Net30 credit terms",
+        "tags": [
+          "Payments - Net30"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orderId"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Net30 order confirmed with invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orderId": {
+                      "type": "string"
+                    },
+                    "invoiceId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "invoiceDueDate": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not eligible for Net30 or insufficient credit"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "409": {
+            "description": "Payment already initiated or order not awaiting payment"
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "summary": "Get user notifications",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "unreadOnly",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated notifications"
+          }
+        }
+      }
+    },
+    "/notifications/unread-count": {
+      "get": {
+        "summary": "Get unread notification count",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unread count"
+          }
+        }
+      }
+    },
+    "/notifications/read-all": {
+      "put": {
+        "summary": "Mark all notifications as read",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All marked as read"
+          }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "put": {
+        "summary": "Mark a notification as read",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification marked as read"
+          },
+          "404": {
+            "description": "Notification not found"
+          }
+        }
+      }
+    },
+    "/notifications/{id}": {
+      "delete": {
+        "summary": "Delete a notification",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification deleted"
+          },
+          "404": {
+            "description": "Notification not found"
+          }
+        }
+      }
+    },
+    "/admin/notifications/bulk": {
+      "post": {
+        "summary": "Send bulk notification to specific users",
+        "tags": [
+          "Admin Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "userIds",
+                  "type",
+                  "title",
+                  "message"
+                ],
+                "properties": {
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "sendEmail": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sent and failed counts"
+          }
+        }
+      }
+    },
+    "/admin/notifications/role": {
+      "post": {
+        "summary": "Send notification to all users with a specific role",
+        "tags": [
+          "Admin Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "role",
+                  "type",
+                  "title",
+                  "message"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "customer",
+                      "supplier"
+                    ]
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "sendEmail": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sent and failed counts"
+          }
+        }
+      }
+    },
+    "/orders": {
+      "post": {
+        "summary": "Create order from cart (stub)",
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "shipping_address"
+                ],
+                "properties": {
+                  "shipping_address": {
+                    "type": "object",
+                    "required": [
+                      "street",
+                      "city",
+                      "state",
+                      "zip_code",
+                      "country"
+                    ],
+                    "properties": {
+                      "street": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "zip_code": {
+                        "type": "string",
+                        "pattern": "^\\d{5}(-\\d{4})?$"
+                      },
+                      "country": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order created"
+          },
+          "201": {
+            "description": "Order created successfully"
+          },
+          "400": {
+            "description": "Validation error, empty cart, or insufficient stock"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer"
+          }
+        },
+        "description": "Creates a new order from the user's cart. Currently a TODO stub."
+      },
+      "get": {
+        "summary": "List user's orders (stub)",
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending_payment",
+                "payment_processing",
+                "payment_confirmed",
+                "awaiting_fulfillment",
+                "partially_shipped",
+                "fully_shipped",
+                "delivered",
+                "cancelled",
+                "refunded"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_by",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created_at"
+              ],
+              "default": "created_at"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated order list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer"
+          }
+        },
+        "description": "Returns paginated list of user's orders. Currently a TODO stub."
+      }
+    },
+    "/orders/{id}/status": {
+      "put": {
+        "summary": "Update order status (stub)",
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending_payment",
+                      "payment_processing",
+                      "payment_confirmed",
+                      "awaiting_fulfillment",
+                      "partially_shipped",
+                      "fully_shipped",
+                      "delivered",
+                      "cancelled",
+                      "refunded"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status updated"
+          },
+          "400": {
+            "description": "Invalid status or invalid transition"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        },
+        "description": "Update order status. Supplier/admin only. Currently a TODO stub."
+      }
+    },
+    "/orders/{id}/confirmation": {
+      "get": {
+        "summary": "Get order confirmation details after payment",
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order confirmation with items and totals"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — customer can only view own orders"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/orders/{id}": {
+      "get": {
+        "summary": "Get order details (stub)",
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — customer can only view own orders"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        },
+        "description": "Returns order details by ID. Currently a TODO stub."
+      }
+    },
+    "/orders/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Cancel an order (stub)",
+        "description": "Cancel an order. Currently a TODO stub.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order cancelled"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/payments/intent": {
+      "post": {
+        "summary": "Create a Stripe PaymentIntent for an order",
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orderId"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "PaymentIntent created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "paymentIntentId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer or not the order owner"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "409": {
+            "description": "Order is not awaiting payment or payment already initiated"
+          }
+        }
+      }
+    },
+    "/payments/confirm": {
+      "post": {
+        "summary": "Confirm payment for an order after client-side completion",
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orderId"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payment confirmation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orderId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "paidAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No payment initiated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer or not the order owner"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/payments/{orderId}/status": {
+      "get": {
+        "summary": "Get payment and order status for an order",
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orderId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment and order status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "paymentStatus": {
+                      "type": "string"
+                    },
+                    "orderStatus": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer or not the order owner"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/payments/retry": {
+      "post": {
+        "summary": "Retry a failed or pending payment with a new PaymentIntent",
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orderId"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "New PaymentIntent created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "paymentIntentId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not the order owner"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "409": {
+            "description": "Order not eligible for retry or max attempts exceeded"
+          }
+        }
+      }
+    },
+    "/payments/{orderId}/attempts": {
+      "get": {
+        "summary": "Get all payment attempts for an order",
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orderId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of payment attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "amount": {
+                        "type": "number"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "failureReason": {
+                        "type": "string",
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not the order owner"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/payments/{orderId}/history": {
+      "get": {
+        "summary": "Get full payment event history for an order",
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orderId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment event history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "orderId": {
+                        "type": "string"
+                      },
+                      "stripePaymentIntentId": {
+                        "type": "string"
+                      },
+                      "amount": {
+                        "type": "number"
+                      },
+                      "currency": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "paymentMethod": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "failureReason": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "stripeEventId": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "paidAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — customer can only view own order"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/payments/refund": {
+      "post": {
+        "summary": "Request a refund and cancel an order",
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orderId"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refund processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "refundId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or no payment intent"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not the order owner"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "409": {
+            "description": "Order not eligible for refund"
+          }
+        }
+      }
+    },
+    "/payments/webhook": {
+      "post": {
+        "summary": "Stripe webhook endpoint (called by Stripe, not by clients)",
+        "tags": [
+          "Payments"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook received"
+          },
+          "400": {
+            "description": "Invalid signature or missing header"
+          }
+        }
+      }
+    },
+    "/suppliers/me/payouts/balance": {
+      "get": {
+        "summary": "Get supplier balance",
+        "description": "Returns current balance, pending commissions, total paid out, and available for payout.",
+        "tags": [
+          "Payouts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supplier balance details"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or supplier not approved"
+          }
+        }
+      }
+    },
+    "/suppliers/me/payouts/history": {
+      "get": {
+        "summary": "Get payout history",
+        "description": "Returns paginated payout records for the authenticated supplier, ordered by created_at DESC.",
+        "tags": [
+          "Payouts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated payout records"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or supplier not approved"
+          }
+        }
+      }
+    },
+    "/suppliers/me/payouts/summary": {
+      "get": {
+        "summary": "Get payout summary",
+        "description": "Returns current/last month earnings, next payout date, and minimum threshold status.",
+        "tags": [
+          "Payouts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payout summary"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or supplier not approved"
+          }
+        }
+      }
+    },
+    "/suppliers/me/payouts/report": {
+      "get": {
+        "summary": "Generate payout report",
+        "description": "Returns a structured payout report for a date range, with commissions grouped by order and line items.",
+        "tags": [
+          "Payouts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Period start date (ISO format)"
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Period end date (ISO format)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payout report with orders, items, and summary"
+          },
+          "400": {
+            "description": "Missing start or end date"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or supplier not approved"
+          }
+        }
+      }
+    },
+    "/admin/payouts": {
+      "post": {
+        "summary": "Record a payout",
+        "description": "Admin endpoint to record a payout for a supplier. Deducts amount from supplier balance.",
+        "tags": [
+          "Admin Payouts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "supplierId",
+                  "amount",
+                  "periodStart",
+                  "periodEnd",
+                  "commissionTotal",
+                  "itemsCount"
+                ],
+                "properties": {
+                  "supplierId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "periodStart": {
+                    "type": "string"
+                  },
+                  "periodEnd": {
+                    "type": "string"
+                  },
+                  "commissionTotal": {
+                    "type": "number"
+                  },
+                  "itemsCount": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payout record created"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not an admin"
+          },
+          "409": {
+            "description": "Insufficient balance"
+          }
+        }
+      }
+    },
+    "/payments/paypal/create-order": {
+      "post": {
+        "summary": "Create a PayPal order for payment",
+        "tags": [
+          "Payments - PayPal"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orderId"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "PayPal order created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "paypalOrderId": {
+                      "type": "string"
+                    },
+                    "approvalUrl": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer or not the order owner"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "409": {
+            "description": "Order not awaiting payment or payment already initiated"
+          },
+          "503": {
+            "description": "PayPal not configured"
+          }
+        }
+      }
+    },
+    "/payments/paypal/capture": {
+      "post": {
+        "summary": "Capture a PayPal payment after buyer approval",
+        "tags": [
+          "Payments - PayPal"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orderId"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payment capture result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orderId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "paidAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No PayPal payment initiated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — not a customer or not the order owner"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/admin/analytics/revenue": {
+      "get": {
+        "summary": "Platform revenue metrics with period comparison",
+        "tags": [
+          "Admin Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "quarter",
+                "year",
+                "all"
+              ],
+              "default": "month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revenue comparison with current and previous period"
+          }
+        }
+      }
+    },
+    "/admin/analytics/revenue/suppliers": {
+      "get": {
+        "summary": "Revenue breakdown by supplier",
+        "tags": [
+          "Admin Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of suppliers with revenue data"
+          }
+        }
+      }
+    },
+    "/admin/analytics/revenue/categories": {
+      "get": {
+        "summary": "Revenue breakdown by product category",
+        "tags": [
+          "Admin Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of categories with revenue data"
+          }
+        }
+      }
+    },
+    "/admin/analytics/revenue/trend": {
+      "get": {
+        "summary": "Revenue trend over time",
+        "tags": [
+          "Admin Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "weekly",
+                "monthly"
+              ],
+              "default": "daily"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of trend data points"
+          }
+        }
+      }
+    },
+    "/admin/analytics/orders": {
+      "get": {
+        "summary": "Order metrics (totals, averages, conversion rate)",
+        "tags": [
+          "Admin Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "quarter",
+                "year",
+                "all"
+              ],
+              "default": "month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order metrics object"
+          }
+        }
+      }
+    },
+    "/admin/analytics/top-products": {
+      "get": {
+        "summary": "Top products by revenue",
+        "tags": [
+          "Admin Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of top products"
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "summary": "List products with pagination and filters",
+        "tags": [
+          "Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "supplierId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "pending_review",
+                "active",
+                "inactive",
+                "out_of_stock"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "minPrice",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "maxPrice",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "price",
+                "created_at"
+              ],
+              "default": "created_at"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated product list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new product",
+        "tags": [
+          "Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "sku",
+                  "price",
+                  "stockQuantity"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 5000
+                  },
+                  "sku": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9-]+$"
+                  },
+                  "price": {
+                    "type": "number",
+                    "minimum": 0.01
+                  },
+                  "stockQuantity": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "maxItems": 5
+                  },
+                  "specifications": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "weight": {
+                    "type": "number"
+                  },
+                  "dimensions": {
+                    "type": "object",
+                    "properties": {
+                      "length": {
+                        "type": "number"
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft",
+                      "pending_review",
+                      "active",
+                      "inactive",
+                      "out_of_stock"
+                    ],
+                    "default": "draft"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Product created"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Insufficient permissions"
+          },
+          "409": {
+            "description": "SKU already exists"
+          }
+        }
+      }
+    },
+    "/products/search": {
+      "get": {
+        "summary": "Full-text search products",
+        "tags": [
+          "Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minPrice",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "maxPrice",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results"
+          },
+          "400": {
+            "description": "Missing search query"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/products/{id}/stock": {
+      "get": {
+        "summary": "Check product stock availability",
+        "tags": [
+          "Products"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stock availability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "product_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "stock_quantity": {
+                      "type": "integer"
+                    },
+                    "in_stock": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/products/{id}": {
+      "get": {
+        "summary": "Get product by ID",
+        "tags": [
+          "Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product details"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update a product",
+        "tags": [
+          "Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "sku": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "number"
+                  },
+                  "stockQuantity": {
+                    "type": "integer"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "specifications": {
+                    "type": "object"
+                  },
+                  "weight": {
+                    "type": "number"
+                  },
+                  "dimensions": {
+                    "type": "object"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Product updated"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not authorized to update this product"
+          },
+          "404": {
+            "description": "Product not found"
+          },
+          "409": {
+            "description": "SKU already exists"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Soft delete a product",
+        "tags": [
+          "Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product deleted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not authorized to delete this product"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/products/{id}/images": {
+      "post": {
+        "summary": "Upload a product image",
+        "tags": [
+          "Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "image"
+                ],
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Image uploaded"
+          },
+          "400": {
+            "description": "Invalid file type, file too large, or max images reached"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not authorized to upload images for this product"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/products/{id}/images/{imageIndex}": {
+      "delete": {
+        "summary": "Delete a product image by index",
+        "tags": [
+          "Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "imageIndex",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image deleted"
+          },
+          "400": {
+            "description": "Invalid image index"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not authorized to delete images for this product"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/suppliers/analytics/dashboard": {
+      "get": {
+        "summary": "Supplier dashboard stats",
+        "description": "Revenue month-over-month, order counts, average order value, active products",
+        "tags": [
+          "Supplier Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard stats"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier"
+          }
+        }
+      }
+    },
+    "/suppliers/analytics/top-products": {
+      "get": {
+        "summary": "Top products by revenue",
+        "description": "Returns top N products ordered by total revenue descending",
+        "tags": [
+          "Supplier Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Top products list"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier"
+          }
+        }
+      }
+    },
+    "/suppliers/analytics/revenue-trend": {
+      "get": {
+        "summary": "Revenue trend over time",
+        "description": "Revenue grouped by time buckets (daily for week/month, weekly for 3months)",
+        "tags": [
+          "Supplier Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "week",
+                "month",
+                "3months"
+              ],
+              "default": "month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revenue trend data points"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier"
+          }
+        }
+      }
+    },
+    "/suppliers/analytics/order-status": {
+      "get": {
+        "summary": "Order status breakdown",
+        "description": "Count of supplier orders grouped by status bucket",
+        "tags": [
+          "Supplier Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order status counts"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier"
+          }
+        }
+      }
+    },
+    "/suppliers/inventory/low-stock": {
+      "get": {
+        "tags": [
+          "Suppliers"
+        ],
+        "summary": "Get low-stock products",
+        "description": "Returns products at or below their low stock threshold. Supplier only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Low stock products list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — supplier only"
+          }
+        }
+      }
+    },
+    "/suppliers/inventory": {
+      "get": {
+        "tags": [
+          "Suppliers"
+        ],
+        "summary": "List inventory",
+        "description": "Returns supplier's full inventory with low-stock summary. Supplier only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inventory list with summary"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — supplier only"
+          }
+        }
+      }
+    },
+    "/suppliers/inventory/{productId}": {
+      "put": {
+        "tags": [
+          "Suppliers"
+        ],
+        "summary": "Update product stock",
+        "description": "Update stock quantity for a specific product. Uses SELECT FOR UPDATE locking. Supplier only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "quantity": {
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "quantity"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stock updated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — supplier only"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/suppliers/inventory/bulk-update": {
+      "post": {
+        "tags": [
+          "Suppliers"
+        ],
+        "summary": "Bulk update stock",
+        "description": "Update stock for multiple products at once (max 50). All-or-nothing transaction. Supplier only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "updates": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "productId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "quantity": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "productId",
+                        "quantity"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "updates"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "All stocks updated"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — supplier only"
+          }
+        }
+      }
+    },
+    "/suppliers/me/orders": {
+      "get": {
+        "summary": "List supplier's orders",
+        "description": "Returns paginated sub-orders for the authenticated supplier with commission breakdown.",
+        "tags": [
+          "Supplier Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by order status"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter orders created on or after this date"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter orders created on or before this date"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of supplier orders"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or supplier not approved"
+          }
+        }
+      }
+    },
+    "/suppliers/me/orders/stats": {
+      "get": {
+        "summary": "Get order statistics",
+        "description": "Returns order counts, revenue, average order value, and status breakdown.",
+        "tags": [
+          "Supplier Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order statistics"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or supplier not approved"
+          }
+        }
+      }
+    },
+    "/suppliers/me/orders/{id}": {
+      "get": {
+        "summary": "Get order detail",
+        "description": "Returns full order detail with items, commission breakdown, shipping address, and status history.",
+        "tags": [
+          "Supplier Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Sub-order ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order detail"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier, not approved, or order belongs to another supplier"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/suppliers/me/orders/items/{itemId}/fulfillment": {
+      "put": {
+        "summary": "Update item fulfillment status",
+        "description": "Updates the fulfillment status of a specific order item. Validates state transitions and requires tracking info when shipping.",
+        "tags": [
+          "Supplier Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Order item ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "fulfillmentStatus"
+                ],
+                "properties": {
+                  "fulfillmentStatus": {
+                    "type": "string",
+                    "enum": [
+                      "processing",
+                      "shipped",
+                      "delivered"
+                    ]
+                  },
+                  "trackingNumber": {
+                    "type": "string",
+                    "description": "Required when fulfillmentStatus is 'shipped'"
+                  },
+                  "carrier": {
+                    "type": "string",
+                    "enum": [
+                      "USPS",
+                      "UPS",
+                      "FedEx",
+                      "DHL",
+                      "Other"
+                    ],
+                    "description": "Required when fulfillmentStatus is 'shipped'"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fulfillment status updated"
+          },
+          "400": {
+            "description": "Validation error (missing tracking info for shipped)"
+          },
+          "401": {
+            "description": "Missing or invalid auth token"
+          },
+          "403": {
+            "description": "Not a supplier or item belongs to another supplier"
+          },
+          "404": {
+            "description": "Order item not found"
+          },
+          "409": {
+            "description": "Invalid status transition"
+          }
+        }
+      }
+    },
+    "/suppliers/products/stats": {
+      "get": {
+        "summary": "Get aggregate stats for the supplier's products",
+        "tags": [
+          "Supplier Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate product stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total_products": {
+                      "type": "integer"
+                    },
+                    "active_count": {
+                      "type": "integer"
+                    },
+                    "pending_count": {
+                      "type": "integer"
+                    },
+                    "rejected_count": {
+                      "type": "integer"
+                    },
+                    "out_of_stock_count": {
+                      "type": "integer"
+                    },
+                    "total_inventory_value": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier role required"
+          }
+        }
+      }
+    },
+    "/suppliers/products": {
+      "get": {
+        "summary": "List supplier's own products",
+        "tags": [
+          "Supplier Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "pending",
+                "active",
+                "inactive",
+                "rejected",
+                "needs_revision"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of supplier's products"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier role required"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new product listing",
+        "tags": [
+          "Supplier Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "sku",
+                  "price",
+                  "stock_quantity"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "sku": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "number"
+                  },
+                  "stock_quantity": {
+                    "type": "integer"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "specifications": {
+                    "type": "object"
+                  },
+                  "weight": {
+                    "type": "number"
+                  },
+                  "dimensions": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Product created with status pending"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier must be approved"
+          },
+          "409": {
+            "description": "SKU already exists for this supplier"
+          }
+        }
+      }
+    },
+    "/suppliers/products/{id}": {
+      "put": {
+        "summary": "Update a product listing",
+        "tags": [
+          "Supplier Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product updated"
+          },
+          "400": {
+            "description": "Validation error or restricted field for active product"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - not product owner"
+          },
+          "404": {
+            "description": "Product not found"
+          },
+          "409": {
+            "description": "SKU already exists for this supplier"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Soft delete a product listing",
+        "tags": [
+          "Supplier Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product deleted"
+          },
+          "400": {
+            "description": "Cannot delete product with open orders"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - not product owner"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/suppliers/products/{id}/images": {
+      "post": {
+        "summary": "Upload an image for a supplier product",
+        "tags": [
+          "Supplier Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "image"
+                ],
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Image file (JPEG, PNG, WebP). Max 5MB."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Image uploaded, returns updated product"
+          },
+          "400": {
+            "description": "Invalid file type, file too large, or already 5 images"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - not product owner"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/suppliers/products/{id}/images/{imageIndex}": {
+      "delete": {
+        "summary": "Delete an image from a supplier product",
+        "tags": [
+          "Supplier Products"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "imageIndex",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image deleted, returns updated product"
+          },
+          "400": {
+            "description": "Image index out of range"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - not product owner"
+          },
+          "404": {
+            "description": "Product not found"
+          }
+        }
+      }
+    },
+    "/suppliers/me": {
+      "get": {
+        "summary": "Get current supplier's profile with documents",
+        "tags": [
+          "Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supplier profile with documents"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier must be approved"
+          },
+          "404": {
+            "description": "Supplier not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update current supplier's profile",
+        "tags": [
+          "Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "businessName": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "businessType": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "contactName": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "contactEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 20
+                  },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "street": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "zip": {
+                        "type": "string"
+                      },
+                      "country": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "bankAccountInfo": {
+                    "type": "object",
+                    "properties": {
+                      "bankName": {
+                        "type": "string"
+                      },
+                      "accountNumber": {
+                        "type": "string"
+                      },
+                      "routingNumber": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "productCategories": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 10
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Supplier profile updated successfully"
+          },
+          "400": {
+            "description": "Validation error or attempting to update blocked fields"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier must be approved"
+          }
+        }
+      }
+    },
+    "/suppliers/me/documents": {
+      "post": {
+        "summary": "Upload a single document",
+        "tags": [
+          "Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "documentType",
+                  "document"
+                ],
+                "properties": {
+                  "documentType": {
+                    "type": "string",
+                    "enum": [
+                      "business_license",
+                      "insurance",
+                      "tax_document",
+                      "certification",
+                      "other"
+                    ]
+                  },
+                  "document": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Document file (PDF, DOC, DOCX, JPEG, PNG). Max 10MB."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document uploaded successfully"
+          },
+          "400": {
+            "description": "Validation error or no file uploaded"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier profile required"
+          }
+        }
+      },
+      "get": {
+        "summary": "List all documents for current supplier",
+        "tags": [
+          "Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of documents with signed URLs"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier profile required"
+          }
+        }
+      }
+    },
+    "/suppliers/me/documents/{documentId}": {
+      "delete": {
+        "summary": "Delete a document",
+        "tags": [
+          "Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Document deleted successfully"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier profile required"
+          },
+          "404": {
+            "description": "Document not found or not owned by supplier"
+          }
+        }
+      }
+    },
+    "/suppliers/me/resubmit": {
+      "put": {
+        "summary": "Resubmit application (needs_revision → pending)",
+        "tags": [
+          "Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Application resubmitted successfully"
+          },
+          "400": {
+            "description": "Can only resubmit when status is needs_revision"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - supplier profile required"
+          }
+        }
+      }
+    },
+    "/suppliers/register": {
+      "post": {
+        "summary": "Submit supplier registration with business details and documents",
+        "tags": [
+          "Suppliers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "businessName",
+                  "taxId",
+                  "contactName",
+                  "contactEmail",
+                  "phone",
+                  "address",
+                  "bankAccountInfo",
+                  "productCategories"
+                ],
+                "properties": {
+                  "businessName": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "businessType": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "taxId": {
+                    "type": "string",
+                    "maxLength": 50
+                  },
+                  "contactName": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "contactEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 20
+                  },
+                  "address": {
+                    "type": "object",
+                    "required": [
+                      "street",
+                      "city",
+                      "state",
+                      "zip"
+                    ],
+                    "properties": {
+                      "street": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "zip": {
+                        "type": "string"
+                      },
+                      "country": {
+                        "type": "string",
+                        "default": "US"
+                      }
+                    }
+                  },
+                  "bankAccountInfo": {
+                    "type": "object",
+                    "required": [
+                      "bankName",
+                      "accountNumber",
+                      "routingNumber"
+                    ],
+                    "properties": {
+                      "bankName": {
+                        "type": "string"
+                      },
+                      "accountNumber": {
+                        "type": "string"
+                      },
+                      "routingNumber": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "productCategories": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 10
+                  },
+                  "documents": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "maxItems": 5,
+                    "description": "Upload up to 5 documents (PDF, DOC, DOCX, JPEG, PNG). Max 10MB each."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Supplier registration submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "supplier": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "userId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "businessName": {
+                          "type": "string"
+                        },
+                        "businessType": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "commissionRate": {
+                          "type": "number"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - user must have supplier role"
+          },
+          "409": {
+            "description": "Supplier application already exists"
+          }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "summary": "Get authenticated user's profile",
+        "tags": [
+          "User Profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "firstName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "customer",
+                        "supplier",
+                        "admin"
+                      ]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "phone": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "company": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "emailVerified": {
+                      "type": "boolean"
+                    },
+                    "vendorId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "commissionRate": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "vendorStatus": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "currentBalance": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "lastLogin": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update profile fields",
+        "tags": [
+          "User Profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "firstName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "lastName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "nullable": true
+                  },
+                  "companyName": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/users/me/change-password": {
+      "post": {
+        "summary": "Change password",
+        "tags": [
+          "User Profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "currentPassword",
+                  "newPassword"
+                ],
+                "properties": {
+                  "currentPassword": {
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed successfully"
+          },
+          "400": {
+            "description": "Weak password or same as current"
+          },
+          "401": {
+            "description": "Current password incorrect or not authenticated"
+          }
+        }
+      }
+    }
+  },
+  "tags": []
+}
