@@ -16,7 +16,7 @@
     "db:rollback": "ts-node scripts/rollback.ts",
     "db:seed": "ts-node scripts/seed.ts",
     "db:status": "ts-node scripts/migrate.ts --status",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "engines": {
     "node": ">=20.0.0"
