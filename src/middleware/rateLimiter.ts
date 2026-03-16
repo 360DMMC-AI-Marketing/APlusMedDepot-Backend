@@ -1,4 +1,4 @@
-import { rateLimit, ipKeyGenerator } from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 /**
  * Global rate limiter — applied to ALL routes.
