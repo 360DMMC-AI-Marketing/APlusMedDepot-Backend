@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 
 /**
  * Global rate limiter — applied to ALL routes.
@@ -9,11 +9,7 @@ export const globalLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return req.ip || forwardedIp || "unknown";
-  },
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ""),
   message: {
     success: false,
     error: {
@@ -32,11 +28,7 @@ export const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return req.ip || forwardedIp || "unknown";
-  },
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ""),
   message: {
     success: false,
     error: {
@@ -55,11 +47,7 @@ export const paymentLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return req.ip || forwardedIp || "unknown";
-  },
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ""),
   message: {
     success: false,
     error: {
@@ -78,6 +66,7 @@ export const webhookLimiter = rateLimit({
   max: 50,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: {
     success: false,
     error: {
@@ -96,11 +85,7 @@ export const searchLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return req.ip || forwardedIp || "unknown";
-  },
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ""),
   message: {
     success: false,
     error: {

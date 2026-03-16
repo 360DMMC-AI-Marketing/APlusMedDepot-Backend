@@ -50,8 +50,8 @@ CREATE POLICY invoices_own_read ON invoices
   FOR SELECT TO authenticated
   USING (user_id = auth.uid());
 
--- Ensure commission_rate default on suppliers table
-ALTER TABLE suppliers ALTER COLUMN commission_rate SET DEFAULT 10;
+-- Ensure commission_rate default on suppliers table (15% standard rate)
+ALTER TABLE suppliers ALTER COLUMN commission_rate SET DEFAULT 15.00;
 
 -- Atomic credit deduction function (prevents race conditions)
 CREATE OR REPLACE FUNCTION deduct_credit(p_user_id UUID, p_amount NUMERIC)
