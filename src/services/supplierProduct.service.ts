@@ -53,6 +53,12 @@ const toSupplierProduct = (row: ProductRow): SupplierProduct => ({
   updatedAt: row.updated_at,
 });
 
+const resolveSignedUrls = async (product: SupplierProduct): Promise<SupplierProduct> => {
+  if (product.images.length === 0) return product;
+  const signedUrls = await StorageService.getSignedUrls(product.images);
+  return { ...product, images: signedUrls };
+};
+
 export class SupplierProductService {
   static async getSupplierIdFromUserId(userId: string): Promise<string> {
     const { data, error } = await supabaseAdmin
@@ -139,7 +145,11 @@ export class SupplierProductService {
     }
 
     const total = count ?? 0;
-    const products = ((data as unknown as ProductRow[] | null) ?? []).map(toSupplierProduct);
+    const products = await Promise.all(
+      ((data as unknown as ProductRow[] | null) ?? [])
+        .map(toSupplierProduct)
+        .map(resolveSignedUrls),
+    );
 
     const filters_applied: Record<string, unknown> = {};
     if (status && status !== "all") filters_applied.status = status;
@@ -232,7 +242,7 @@ export class SupplierProductService {
       throw new AppError("Product not created", 500, "DATABASE_ERROR");
     }
 
-    return toSupplierProduct(data as unknown as ProductRow);
+    return resolveSignedUrls(toSupplierProduct(data as unknown as ProductRow));
   }
 
   static async update(
@@ -341,7 +351,7 @@ export class SupplierProductService {
       throw new AppError("Product not updated", 500, "DATABASE_ERROR");
     }
 
-    return toSupplierProduct(data as unknown as ProductRow);
+    return resolveSignedUrls(toSupplierProduct(data as unknown as ProductRow));
   }
 
   static async uploadImage(

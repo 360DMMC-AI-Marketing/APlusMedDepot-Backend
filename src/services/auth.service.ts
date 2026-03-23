@@ -146,7 +146,7 @@ export class AuthService {
           company_name: companyName,
           phone,
           role,
-          status: "pending",
+          status: role === "customer" ? "approved" : "pending",
         })
         .select(USER_SELECT_FIELDS)
         .single();
