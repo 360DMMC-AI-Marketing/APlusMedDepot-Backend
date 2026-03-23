@@ -158,6 +158,7 @@ export type AdminProductListItem = {
   stockQuantity: number;
   category: string | null;
   status: string;
+  images: string[];
   supplierName: string;
   supplierId: string;
   isFeatured: boolean;

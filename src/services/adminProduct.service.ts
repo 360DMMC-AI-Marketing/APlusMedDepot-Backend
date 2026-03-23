@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../config/supabase";
+import { StorageService } from "./storage.service";
 import { sendEmail } from "./email.service";
 import { AuditLogService } from "./auditLog.service";
 import { baseLayout, escapeHtml } from "../templates/baseLayout";
@@ -97,6 +98,11 @@ export interface ReviewedProduct {
 const PRODUCT_REVIEW_FIELDS =
   "id, supplier_id, name, description, sku, price, original_price, stock_quantity, category, status, images, specifications, weight, dimensions, is_deleted, reviewed_by, reviewed_at, admin_feedback, created_at, updated_at";
 
+const resolveImages = async (images: string[] | null): Promise<string[]> => {
+  if (!images || images.length === 0) return [];
+  return StorageService.getSignedUrls(images);
+};
+
 export class AdminProductService {
   /**
    * GET /api/admin/products/pending
@@ -144,16 +150,18 @@ export class AdminProductService {
     }
 
     const total = count ?? 0;
-    const products: PendingProduct[] = rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      sku: r.sku,
-      price: Number(r.price),
-      category: r.category,
-      images: r.images,
-      created_at: r.created_at,
-      supplier: supplierMap.get(r.supplier_id) ?? { id: r.supplier_id, business_name: "Unknown" },
-    }));
+    const products: PendingProduct[] = await Promise.all(
+      rows.map(async (r) => ({
+        id: r.id,
+        name: r.name,
+        sku: r.sku,
+        price: Number(r.price),
+        category: r.category,
+        images: await resolveImages(r.images),
+        created_at: r.created_at,
+        supplier: supplierMap.get(r.supplier_id) ?? { id: r.supplier_id, business_name: "Unknown" },
+      })),
+    );
 
     return {
       products,
@@ -227,7 +235,7 @@ export class AdminProductService {
       stock_quantity: row.stock_quantity,
       category: row.category,
       status: row.status,
-      images: row.images,
+      images: await resolveImages(row.images),
       specifications: row.specifications,
       weight: row.weight !== null ? Number(row.weight) : null,
       dimensions: row.dimensions,
@@ -502,7 +510,7 @@ export class AdminProductService {
     let query = supabaseAdmin
       .from("products")
       .select(
-        "id, name, sku, price, original_price, stock_quantity, category, status, supplier_id, is_featured, created_at, suppliers(business_name)",
+        "id, name, sku, price, original_price, stock_quantity, category, status, images, supplier_id, is_featured, created_at, suppliers(business_name)",
         { count: "exact" },
       )
       .eq("is_deleted", false);
@@ -539,6 +547,7 @@ export class AdminProductService {
       stock_quantity: number;
       category: string | null;
       status: string;
+      images: string[] | null;
       supplier_id: string;
       is_featured: boolean;
       created_at: string;
@@ -548,20 +557,23 @@ export class AdminProductService {
     const rows = (data ?? []) as unknown as ProductListRow[];
     const total = count ?? 0;
 
-    const items: AdminProductListItem[] = rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      sku: row.sku,
-      price: Number(row.price),
-      originalPrice: row.original_price ? Number(row.original_price) : null,
-      stockQuantity: row.stock_quantity,
-      category: row.category,
-      status: row.status,
-      supplierName: row.suppliers?.business_name ?? "Unknown",
-      supplierId: row.supplier_id,
-      isFeatured: row.is_featured ?? false,
-      createdAt: row.created_at,
-    }));
+    const items: AdminProductListItem[] = await Promise.all(
+      rows.map(async (row) => ({
+        id: row.id,
+        name: row.name,
+        sku: row.sku,
+        price: Number(row.price),
+        originalPrice: row.original_price ? Number(row.original_price) : null,
+        stockQuantity: row.stock_quantity,
+        category: row.category,
+        status: row.status,
+        images: await resolveImages(row.images),
+        supplierName: row.suppliers?.business_name ?? "Unknown",
+        supplierId: row.supplier_id,
+        isFeatured: row.is_featured ?? false,
+        createdAt: row.created_at,
+      })),
+    );
 
     return {
       data: items,
@@ -634,7 +646,7 @@ export class AdminProductService {
       stockQuantity: product.stock_quantity,
       category: product.category,
       status: product.status,
-      images: product.images,
+      images: await resolveImages(product.images),
       specifications: product.specifications,
       weight: product.weight !== null ? Number(product.weight) : null,
       dimensions: product.dimensions,
