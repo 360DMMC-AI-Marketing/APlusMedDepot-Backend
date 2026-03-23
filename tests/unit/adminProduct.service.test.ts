@@ -3,6 +3,20 @@ const mockFrom = jest.fn();
 jest.mock("../../src/config/supabase", () => ({
   supabaseAdmin: {
     from: mockFrom,
+    storage: {
+      listBuckets: jest.fn().mockResolvedValue({ data: [], error: null }),
+      createBucket: jest.fn().mockResolvedValue({ data: null, error: null }),
+      from: jest.fn(() => ({
+        upload: jest.fn().mockResolvedValue({ data: null, error: null }),
+        createSignedUrl: jest
+          .fn()
+          .mockResolvedValue({ data: { signedUrl: "http://signed" }, error: null }),
+        createSignedUrls: jest
+          .fn()
+          .mockResolvedValue({ data: [{ signedUrl: "http://signed" }], error: null }),
+        remove: jest.fn().mockResolvedValue({ data: null, error: null }),
+      })),
+    },
   },
 }));
 
