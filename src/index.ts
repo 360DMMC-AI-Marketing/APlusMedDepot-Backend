@@ -45,6 +45,11 @@ import aiVerificationRoutes from "./routes/aiVerification.routes";
 
 const app = express();
 
+// Trust proxy in production (Render, AWS, etc. sit behind a reverse proxy)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // Global middleware
 app.use(helmet());
 app.use(
