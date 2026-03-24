@@ -1,0 +1,998 @@
+import request from "supertest";
+
+const mockVerifyToken = jest.fn();
+
+jest.mock("../../src/services/auth.service", () => ({
+  AuthService: {
+    signUp: jest.fn(),
+    verifyToken: mockVerifyToken,
+  },
+}));
+
+const mockList = jest.fn();
+const mockCreate = jest.fn();
+const mockUpdate = jest.fn();
+const mockSoftDelete = jest.fn();
+const mockGetSupplierIdFromUserId = jest.fn();
+const mockUploadImage = jest.fn();
+const mockDeleteImage = jest.fn();
+const mockGetStats = jest.fn();
+
+jest.mock("../../src/services/supplierProduct.service", () => ({
+  SupplierProductService: {
+    list: mockList,
+    create: mockCreate,
+    update: mockUpdate,
+    softDelete: mockSoftDelete,
+    getSupplierIdFromUserId: mockGetSupplierIdFromUserId,
+    uploadImage: mockUploadImage,
+    deleteImage: mockDeleteImage,
+    getStats: mockGetStats,
+  },
+}));
+
+jest.mock("../../src/services/product.service", () => ({
+  ProductService: {},
+}));
+
+jest.mock("../../src/services/storage.service", () => ({
+  StorageService: {},
+}));
+
+jest.mock("../../src/services/cart.service", () => ({
+  CartService: {},
+}));
+
+jest.mock("../../src/services/order.service", () => ({
+  OrderService: {},
+}));
+
+jest.mock("../../src/services/checkout.service", () => ({
+  CheckoutService: {},
+}));
+
+jest.mock("../../src/utils/inventory", () => ({
+  checkStock: jest.fn(),
+}));
+
+jest.mock(
+  "express-rate-limit",
+  () => () => (_req: unknown, _res: unknown, next: () => void) => next(),
+);
+
+import app from "../../src/index";
+
+const PRODUCT_ID = "a0000000-0000-4000-8000-000000000001";
+const SUPPLIER_ID = "b0000000-0000-4000-8000-000000000002";
+
+const supplierUser = {
+  id: "user-supplier-1",
+  email: "supplier@example.com",
+  firstName: "Sam",
+  lastName: "Supply",
+  companyName: null,
+  phone: null,
+  role: "supplier" as const,
+  status: "approved" as const,
+  lastLogin: null,
+};
+
+const customerUser = {
+  id: "user-customer-1",
+  email: "customer@example.com",
+  firstName: "Jane",
+  lastName: "Doe",
+  companyName: "Acme",
+  phone: null,
+  role: "customer" as const,
+  status: "approved" as const,
+  lastLogin: null,
+};
+
+const sampleProduct = {
+  id: PRODUCT_ID,
+  supplierId: SUPPLIER_ID,
+  name: "Surgical Gloves",
+  description: "High quality surgical gloves",
+  sku: "SG-001",
+  price: 29.99,
+  stockQuantity: 100,
+  category: "Surgical Supplies",
+  status: "pending",
+  images: [],
+  specifications: { material: "Latex" },
+  weight: 0.5,
+  dimensions: { length: 30, width: 20, height: 5 },
+  isDeleted: false,
+  createdAt: "2024-01-01T00:00:00Z",
+  updatedAt: "2024-01-01T00:00:00Z",
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+// ─── GET /api/suppliers/products ────────────────────────────────────────────
+
+describe("GET /api/suppliers/products", () => {
+  it("returns 200 with paginated products for approved supplier", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      products: [sampleProduct],
+      pagination: { page: 1, limit: 20, total: 1, total_pages: 1 },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.products).toHaveLength(1);
+    expect(res.body.pagination).toEqual({ page: 1, limit: 20, total: 1, total_pages: 1 });
+    expect(mockGetSupplierIdFromUserId).toHaveBeenCalledWith("user-supplier-1");
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ page: 1, limit: 20 }),
+    );
+  });
+
+  it("returns 200 with status filter", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      products: [],
+      pagination: { page: 1, limit: 20, total: 0, total_pages: 0 },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?status=pending")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ status: "pending" }),
+    );
+  });
+
+  it("returns 200 with search filter", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      products: [],
+      pagination: { page: 1, limit: 20, total: 0, total_pages: 0 },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?search=gloves")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ search: "gloves" }),
+    );
+  });
+
+  it("returns 200 with category filter", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      products: [sampleProduct],
+      pagination: { page: 1, limit: 20, total: 1, total_pages: 1 },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?category=Surgical+Supplies")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ category: "Surgical Supplies" }),
+    );
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).get("/api/suppliers/products");
+
+    expect(res.status).toBe(401);
+    expect(mockList).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when customer tries to list supplier products", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+
+    const res = await request(app)
+      .get("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+    expect(mockList).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when supplier is not approved", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    const err = new Error("Supplier not approved");
+    Object.assign(err, { code: "FORBIDDEN", statusCode: 403, name: "AppError" });
+    mockGetSupplierIdFromUserId.mockRejectedValue(err);
+
+    const res = await request(app)
+      .get("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+    expect(mockList).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when supplier record does not exist", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    const err = new Error("Supplier not found");
+    Object.assign(err, { code: "NOT_FOUND", statusCode: 404, name: "AppError" });
+    mockGetSupplierIdFromUserId.mockRejectedValue(err);
+
+    const res = await request(app)
+      .get("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─── POST /api/suppliers/products ───────────────────────────────────────────
+
+describe("POST /api/suppliers/products", () => {
+  const validPayload = {
+    name: "Surgical Gloves",
+    sku: "SG-001",
+    price: 29.99,
+    stock_quantity: 100,
+  };
+
+  it("creates product and returns 201", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockCreate.mockResolvedValue(sampleProduct);
+
+    const res = await request(app)
+      .post("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token")
+      .send(validPayload);
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe(PRODUCT_ID);
+    expect(res.body.status).toBe("pending");
+    expect(mockCreate).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ sku: "SG-001" }),
+    );
+  });
+
+  it("returns 409 for duplicate SKU within the same supplier", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("SKU already exists for this supplier");
+    Object.assign(err, { code: "CONFLICT", statusCode: 409, name: "AppError" });
+    mockCreate.mockRejectedValue(err);
+
+    const res = await request(app)
+      .post("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token")
+      .send(validPayload);
+
+    expect(res.status).toBe(409);
+  });
+
+  it("returns 403 when supplier is not approved", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    const err = new Error("Supplier not approved");
+    Object.assign(err, { code: "FORBIDDEN", statusCode: 403, name: "AppError" });
+    mockGetSupplierIdFromUserId.mockRejectedValue(err);
+
+    const res = await request(app)
+      .post("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token")
+      .send(validPayload);
+
+    expect(res.status).toBe(403);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when customer tries to create", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+
+    const res = await request(app)
+      .post("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token")
+      .send(validPayload);
+
+    expect(res.status).toBe(403);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for invalid SKU format", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+
+    const res = await request(app)
+      .post("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token")
+      .send({ ...validPayload, sku: "INVALID SKU WITH SPACES" });
+
+    expect(res.status).toBe(400);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for negative price", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+
+    const res = await request(app)
+      .post("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token")
+      .send({ ...validPayload, price: -5 });
+
+    expect(res.status).toBe(400);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for negative stock_quantity", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+
+    const res = await request(app)
+      .post("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token")
+      .send({ ...validPayload, stock_quantity: -1 });
+
+    expect(res.status).toBe(400);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("creates product with specifications and returns 201", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const productWithSpecs = {
+      ...sampleProduct,
+      specifications: { material: "Latex", size: "Large" },
+    };
+    mockCreate.mockResolvedValue(productWithSpecs);
+
+    const res = await request(app)
+      .post("/api/suppliers/products")
+      .set("Authorization", "Bearer valid-token")
+      .send({ ...validPayload, specifications: { material: "Latex", size: "Large" } });
+
+    expect(res.status).toBe(201);
+    expect(res.body.specifications).toEqual({ material: "Latex", size: "Large" });
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).post("/api/suppliers/products").send(validPayload);
+
+    expect(res.status).toBe(401);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});
+
+// ─── PUT /api/suppliers/products/:id ────────────────────────────────────────
+
+describe("PUT /api/suppliers/products/:id", () => {
+  it("updates pending product (full edit) and returns 200", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockUpdate.mockResolvedValue({ ...sampleProduct, name: "Updated Gloves" });
+
+    const res = await request(app)
+      .put(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ name: "Updated Gloves" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe("Updated Gloves");
+    expect(mockUpdate).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      PRODUCT_ID,
+      expect.objectContaining({ name: "Updated Gloves" }),
+    );
+  });
+
+  it("returns 400 when trying to update restricted field on active product", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error(
+      "Cannot update name for active products. Active products require re-approval for content changes.",
+    );
+    Object.assign(err, { code: "BAD_REQUEST", statusCode: 400, name: "AppError" });
+    mockUpdate.mockRejectedValue(err);
+
+    const res = await request(app)
+      .put(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ name: "New Name" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("resubmits rejected product for review and returns 200", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const resubmittedProduct = { ...sampleProduct, status: "pending", name: "Fixed Gloves" };
+    mockUpdate.mockResolvedValue(resubmittedProduct);
+
+    const res = await request(app)
+      .put(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ name: "Fixed Gloves" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("pending");
+  });
+
+  it("returns 403 when non-owner tries to update", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue("c0000000-0000-4000-8000-000000000003");
+    const err = new Error("Not authorized to update this product");
+    Object.assign(err, { code: "FORBIDDEN", statusCode: 403, name: "AppError" });
+    mockUpdate.mockRejectedValue(err);
+
+    const res = await request(app)
+      .put(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ name: "Hijacked" });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 when product does not exist", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("Product not found");
+    Object.assign(err, { code: "NOT_FOUND", statusCode: 404, name: "AppError" });
+    mockUpdate.mockRejectedValue(err);
+
+    const res = await request(app)
+      .put(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ price: 19.99 });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for invalid UUID in path", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+    const res = await request(app)
+      .put("/api/suppliers/products/not-a-uuid")
+      .set("Authorization", "Bearer valid-token")
+      .send({ price: 19.99 });
+
+    expect(res.status).toBe(400);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 for duplicate SKU on update", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("SKU already exists for this supplier");
+    Object.assign(err, { code: "CONFLICT", statusCode: 409, name: "AppError" });
+    mockUpdate.mockRejectedValue(err);
+
+    const res = await request(app)
+      .put(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ sku: "EXISTING-SKU" });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("returns 403 when customer tries to update", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+
+    const res = await request(app)
+      .put(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token")
+      .send({ name: "Hijacked" });
+
+    expect(res.status).toBe(403);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// ─── DELETE /api/suppliers/products/:id ─────────────────────────────────────
+
+describe("DELETE /api/suppliers/products/:id", () => {
+  it("soft deletes product and returns 200", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockSoftDelete.mockResolvedValue(undefined);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.message).toBe("Product deleted");
+    expect(mockSoftDelete).toHaveBeenCalledWith(SUPPLIER_ID, PRODUCT_ID);
+  });
+
+  it("returns 400 when product has open orders", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("Cannot delete product with open orders");
+    Object.assign(err, { code: "BAD_REQUEST", statusCode: 400, name: "AppError" });
+    mockSoftDelete.mockRejectedValue(err);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 403 when non-owner tries to delete", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue("c0000000-0000-4000-8000-000000000003");
+    const err = new Error("Not authorized to delete this product");
+    Object.assign(err, { code: "FORBIDDEN", statusCode: 403, name: "AppError" });
+    mockSoftDelete.mockRejectedValue(err);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 when product does not exist", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("Product not found");
+    Object.assign(err, { code: "NOT_FOUND", statusCode: 404, name: "AppError" });
+    mockSoftDelete.mockRejectedValue(err);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for invalid UUID in path", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+    const res = await request(app)
+      .delete("/api/suppliers/products/not-a-uuid")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+    expect(mockSoftDelete).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when customer tries to delete", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+    expect(mockSoftDelete).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).delete(`/api/suppliers/products/${PRODUCT_ID}`);
+
+    expect(res.status).toBe(401);
+    expect(mockSoftDelete).not.toHaveBeenCalled();
+  });
+});
+
+// ─── POST /api/suppliers/products/:id/images ────────────────────────────────
+
+describe("POST /api/suppliers/products/:id/images", () => {
+  const fakeImageBuffer = Buffer.from("fake-image-data");
+
+  it("uploads valid image and returns 201 with updated product", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const updatedProduct = {
+      ...sampleProduct,
+      images: ["https://signed.example.com/image1.jpg"],
+    };
+    mockUploadImage.mockResolvedValue(updatedProduct);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", fakeImageBuffer, { filename: "test.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.images).toHaveLength(1);
+    expect(mockUploadImage).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      PRODUCT_ID,
+      expect.objectContaining({ mimetype: "image/jpeg" }),
+    );
+  });
+
+  it("returns 400 for invalid file type", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", fakeImageBuffer, { filename: "test.gif", contentType: "image/gif" });
+
+    expect(res.status).toBe(400);
+    expect(mockUploadImage).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for file exceeding 5MB", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+
+    const largeBuffer = Buffer.alloc(6 * 1024 * 1024);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", largeBuffer, { filename: "large.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+    expect(mockUploadImage).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when product already has 5 images", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("Maximum 5 images per product");
+    Object.assign(err, { code: "BAD_REQUEST", statusCode: 400, name: "AppError" });
+    mockUploadImage.mockRejectedValue(err);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", fakeImageBuffer, { filename: "test.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when no file is attached", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+    expect(mockUploadImage).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when non-owner supplier tries to upload", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue("c0000000-0000-4000-8000-000000000003");
+    const err = new Error("Not authorized to upload images for this product");
+    Object.assign(err, { code: "FORBIDDEN", statusCode: 403, name: "AppError" });
+    mockUploadImage.mockRejectedValue(err);
+
+    const res = await request(app)
+      .post(`/api/suppliers/products/${PRODUCT_ID}/images`)
+      .set("Authorization", "Bearer valid-token")
+      .attach("image", fakeImageBuffer, { filename: "test.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(403);
+  });
+});
+
+// ─── DELETE /api/suppliers/products/:id/images/:imageIndex ──────────────────
+
+describe("DELETE /api/suppliers/products/:id/images/:imageIndex", () => {
+  it("deletes image and returns 200 with updated product", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const updatedProduct = { ...sampleProduct, images: [] };
+    mockDeleteImage.mockResolvedValue(updatedProduct);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}/images/0`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.images).toHaveLength(0);
+    expect(mockDeleteImage).toHaveBeenCalledWith(SUPPLIER_ID, PRODUCT_ID, 0);
+  });
+
+  it("returns 400 for negative image index", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}/images/-1`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+    expect(mockDeleteImage).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for out-of-bounds image index", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const err = new Error("Image index out of range");
+    Object.assign(err, { code: "BAD_REQUEST", statusCode: 400, name: "AppError" });
+    mockDeleteImage.mockRejectedValue(err);
+
+    const res = await request(app)
+      .delete(`/api/suppliers/products/${PRODUCT_ID}/images/99`)
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─── GET /api/suppliers/products — advanced filters (Tier 2) ────────────────
+
+describe("GET /api/suppliers/products — advanced filters", () => {
+  const makeListResponse = (products: (typeof sampleProduct)[]) => ({
+    products,
+    pagination: { page: 1, limit: 20, total: products.length, total_pages: 1 },
+    filters_applied: {},
+  });
+
+  it("filters by status=active and returns matching products", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    const activeProduct = { ...sampleProduct, status: "active" };
+    mockList.mockResolvedValue({
+      ...makeListResponse([activeProduct]),
+      filters_applied: { status: "active" },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?status=active")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.filters_applied).toEqual({ status: "active" });
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ status: "active" }),
+    );
+  });
+
+  it("filters by in_stock=true and passes correct param to service", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { in_stock: true },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?in_stock=true")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(SUPPLIER_ID, expect.objectContaining({ in_stock: true }));
+    expect(res.body.filters_applied.in_stock).toBe(true);
+  });
+
+  it("filters by price range (price_min + price_max)", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { price_min: 10, price_max: 50 },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?price_min=10&price_max=50")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ price_min: 10, price_max: 50 }),
+    );
+  });
+
+  it("searches by name (case-insensitive via service)", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { search: "Gloves" },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?search=Gloves")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ search: "Gloves" }),
+    );
+  });
+
+  it("applies combined filters and returns intersection", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { status: "active", category: "Surgical Supplies", in_stock: true },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?status=active&category=Surgical+Supplies&in_stock=true")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({
+        status: "active",
+        category: "Surgical Supplies",
+        in_stock: true,
+      }),
+    );
+  });
+
+  it("sorts by price ascending", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      ...makeListResponse([sampleProduct]),
+      filters_applied: { sort_by: "price", sort_order: "asc" },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?sort_by=price&sort_order=asc")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ sort_by: "price", sort_order: "asc" }),
+    );
+  });
+
+  it("sorts by name descending", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue(makeListResponse([]));
+
+    const res = await request(app)
+      .get("/api/suppliers/products?sort_by=name&sort_order=desc")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ sort_by: "name", sort_order: "desc" }),
+    );
+  });
+
+  it("sorts by stock_quantity ascending", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue(makeListResponse([]));
+
+    const res = await request(app)
+      .get("/api/suppliers/products?sort_by=stock_quantity&sort_order=asc")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ sort_by: "stock_quantity", sort_order: "asc" }),
+    );
+  });
+
+  it("returns 400 for invalid sort_by value", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+
+    const res = await request(app)
+      .get("/api/suppliers/products?sort_by=invalid_field")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(400);
+    expect(mockList).not.toHaveBeenCalled();
+  });
+
+  it("pagination total reflects filtered count", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockList.mockResolvedValue({
+      products: [sampleProduct],
+      pagination: { page: 2, limit: 5, total: 11, total_pages: 3 },
+      filters_applied: { status: "active" },
+    });
+
+    const res = await request(app)
+      .get("/api/suppliers/products?status=active&page=2&limit=5")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.pagination).toEqual({ page: 2, limit: 5, total: 11, total_pages: 3 });
+    expect(mockList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      expect.objectContaining({ status: "active", page: 2, limit: 5 }),
+    );
+  });
+});
+
+// ─── GET /api/suppliers/products/stats ──────────────────────────────────────
+
+describe("GET /api/suppliers/products/stats", () => {
+  const sampleStats = {
+    total_products: 10,
+    active_count: 5,
+    pending_count: 2,
+    rejected_count: 1,
+    out_of_stock_count: 3,
+    total_inventory_value: 1250.0,
+  };
+
+  it("returns 200 with correct aggregate stats", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
+    mockGetStats.mockResolvedValue(sampleStats);
+
+    const res = await request(app)
+      .get("/api/suppliers/products/stats")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(sampleStats);
+    expect(mockGetStats).toHaveBeenCalledWith(SUPPLIER_ID);
+  });
+
+  it("stats are isolated to this supplier (service called with correct supplierId)", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    const otherSupplierId = "c0000000-0000-4000-8000-000000000003";
+    mockGetSupplierIdFromUserId.mockResolvedValue(otherSupplierId);
+    mockGetStats.mockResolvedValue({ ...sampleStats, total_products: 2, active_count: 2 });
+
+    const res = await request(app)
+      .get("/api/suppliers/products/stats")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(mockGetStats).toHaveBeenCalledWith(otherSupplierId);
+    expect(mockGetStats).not.toHaveBeenCalledWith(SUPPLIER_ID);
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).get("/api/suppliers/products/stats");
+
+    expect(res.status).toBe(401);
+    expect(mockGetStats).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when customer tries to access stats", async () => {
+    mockVerifyToken.mockResolvedValue(customerUser);
+
+    const res = await request(app)
+      .get("/api/suppliers/products/stats")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+    expect(mockGetStats).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when supplier is not approved", async () => {
+    mockVerifyToken.mockResolvedValue(supplierUser);
+    const err = new Error("Supplier not approved");
+    Object.assign(err, { code: "FORBIDDEN", statusCode: 403, name: "AppError" });
+    mockGetSupplierIdFromUserId.mockRejectedValue(err);
+
+    const res = await request(app)
+      .get("/api/suppliers/products/stats")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(403);
+    expect(mockGetStats).not.toHaveBeenCalled();
+  });
+});

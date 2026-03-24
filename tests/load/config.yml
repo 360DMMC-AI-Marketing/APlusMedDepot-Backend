@@ -1,0 +1,106 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20
+      name: "Sustained load"
+    - duration: 30
+      arrivalRate: 50
+      name: "Peak load"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Browse products"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/products?page=1&limit=20"
+
+  - name: "Search products"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/products/search?q=surgical"
+
+  - name: "Full purchase flow"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "customer@test.com"
+            password: "Test123!@"
+          capture:
+            - json: "$.session.accessToken"
+              as: "token"
+      - post:
+          url: "/api/cart/items"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          json:
+            productId: "test-product-id"
+            quantity: 1
+      - post:
+          url: "/api/checkout/validate"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          json:
+            shipping_address:
+              street: "123 Test St"
+              city: "Dallas"
+              state: "TX"
+              zip_code: "75201"
+              country: "US"
+
+  - name: "Supplier dashboard"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "supplier@test.com"
+            password: "Test123!@"
+          capture:
+            - json: "$.session.accessToken"
+              as: "token"
+      - get:
+          url: "/api/suppliers/me/orders"
+          headers:
+            Authorization: "Bearer {{ token }}"
+
+  - name: "Admin dashboard"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "admin@test.com"
+            password: "Test123!@"
+          capture:
+            - json: "$.session.accessToken"
+              as: "token"
+      - get:
+          url: "/api/admin/dashboard"
+          headers:
+            Authorization: "Bearer {{ token }}"
+
+  - name: "Credit check"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "customer@test.com"
+            password: "Test123!@"
+          capture:
+            - json: "$.session.accessToken"
+              as: "token"
+      - get:
+          url: "/api/users/me/credit"
+          headers:
+            Authorization: "Bearer {{ token }}"
