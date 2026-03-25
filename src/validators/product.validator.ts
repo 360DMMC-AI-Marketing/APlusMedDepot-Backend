@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { categoryEnum } from "../constants/categories";
 
 const productStatusEnum = z.enum(["draft", "pending_review", "active", "inactive", "out_of_stock"]);
 
@@ -29,7 +30,7 @@ export const createProductSchema = z.object({
     .number()
     .int("Stock quantity must be an integer")
     .nonnegative("Stock quantity must be non-negative"),
-  category: z.string().optional(),
+  category: z.enum(categoryEnum).optional(),
   images: z
     .array(z.string().url("Each image must be a valid URL"))
     .max(5, "Maximum 5 images allowed")
@@ -49,7 +50,7 @@ export const updateProductSchema = z.object({
   price: priceSchema.optional(),
   originalPrice: z.number().positive().optional().nullable(),
   stockQuantity: z.number().int().nonnegative().optional(),
-  category: z.string().optional(),
+  category: z.enum(categoryEnum).optional(),
   images: z.array(z.string().url()).max(5).optional(),
   specifications: z.record(z.string(), z.string()).optional(),
   weight: z.number().positive().optional(),
@@ -63,7 +64,7 @@ export const productQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().optional(),
-  category: z.string().optional(),
+  category: z.enum(categoryEnum).optional(),
   supplierId: z.string().uuid("Invalid supplier ID").optional(),
   status: productStatusEnum.optional(),
   minPrice: z.coerce.number().nonnegative().optional(),
@@ -76,7 +77,7 @@ export type ProductQueryInput = z.infer<typeof productQuerySchema>;
 
 export const searchQuerySchema = z.object({
   q: z.string().min(1, "Search query is required"),
-  category: z.string().optional(),
+  category: z.enum(categoryEnum).optional(),
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
   page: z.coerce.number().int().positive().default(1),

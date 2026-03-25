@@ -99,7 +99,7 @@ const sampleProduct = {
   sku: "SG-001",
   price: 29.99,
   stockQuantity: 100,
-  category: "Surgical Supplies",
+  category: "Wound Care",
   status: "active",
   images: ["https://example.com/img1.jpg"],
   specifications: { material: "Latex", size: "Medium" },
@@ -159,13 +159,11 @@ describe("GET /api/products", () => {
     mockList.mockResolvedValue(paginatedResponse);
 
     const res = await request(app)
-      .get("/api/products?category=Surgical+Supplies")
+      .get("/api/products?category=Wound+Care")
       .set("Authorization", "Bearer valid-token");
 
     expect(res.status).toBe(200);
-    expect(mockList).toHaveBeenCalledWith(
-      expect.objectContaining({ category: "Surgical Supplies" }),
-    );
+    expect(mockList).toHaveBeenCalledWith(expect.objectContaining({ category: "Wound Care" }));
   });
 
   it("returns 200 without auth token (public catalog)", async () => {

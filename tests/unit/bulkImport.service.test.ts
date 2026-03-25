@@ -38,7 +38,7 @@ function makeProduct(overrides: Record<string, unknown> = {}) {
     sku: "TEST-001",
     price: 29.99,
     stockQuantity: 50,
-    category: "medical",
+    category: "Wound Care",
     ...overrides,
   };
 }

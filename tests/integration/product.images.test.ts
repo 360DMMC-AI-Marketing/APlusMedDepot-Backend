@@ -85,7 +85,7 @@ const sampleProduct = {
   sku: "SG-001",
   price: 29.99,
   stockQuantity: 100,
-  category: "Surgical Supplies",
+  category: "Wound Care",
   status: "active",
   images: ["sup1/prod1/img1.jpg", "sup1/prod1/img2.jpg"],
   specifications: {},
