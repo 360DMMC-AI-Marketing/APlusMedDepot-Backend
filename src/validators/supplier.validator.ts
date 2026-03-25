@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { categoryEnum } from "../constants/categories";
 
 export const supplierRegistrationSchema = z.object({
   businessName: z
@@ -26,7 +27,7 @@ export const supplierRegistrationSchema = z.object({
     routingNumber: z.string().min(1, "Routing number is required"),
   }),
   productCategories: z
-    .array(z.string())
+    .array(z.enum(categoryEnum))
     .min(1, "At least one product category is required")
     .max(10, "Maximum 10 product categories allowed"),
 });
@@ -60,7 +61,7 @@ export const supplierUpdateSchema = z.object({
     })
     .optional(),
   productCategories: z
-    .array(z.string())
+    .array(z.enum(categoryEnum))
     .min(1, "At least one product category is required")
     .max(10, "Maximum 10 product categories allowed")
     .optional(),

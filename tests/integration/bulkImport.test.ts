@@ -100,9 +100,27 @@ describe("POST /api/suppliers/products/bulk-import", () => {
       .set("Authorization", "Bearer valid-token")
       .send({
         products: [
-          { name: "Product 1", sku: "SKU-001", price: 10, stockQuantity: 5, category: "medical" },
-          { name: "Product 2", sku: "SKU-002", price: 20, stockQuantity: 10, category: "medical" },
-          { name: "Product 3", sku: "SKU-003", price: 30, stockQuantity: 15, category: "medical" },
+          {
+            name: "Product 1",
+            sku: "SKU-001",
+            price: 10,
+            stockQuantity: 5,
+            category: "Wound Care",
+          },
+          {
+            name: "Product 2",
+            sku: "SKU-002",
+            price: 20,
+            stockQuantity: 10,
+            category: "Wound Care",
+          },
+          {
+            name: "Product 3",
+            sku: "SKU-003",
+            price: 30,
+            stockQuantity: 15,
+            category: "Wound Care",
+          },
         ],
       });
 
@@ -133,9 +151,9 @@ describe("POST /api/suppliers/products/bulk-import", () => {
             sku: "SKU-001",
             price: 10,
             stockQuantity: 5,
-            category: "medical",
+            category: "Wound Care",
           },
-          { name: "", sku: "BAD", price: 10, stockQuantity: 5, category: "medical" },
+          { name: "", sku: "BAD", price: 10, stockQuantity: 5, category: "Wound Care" },
         ],
       });
 
@@ -153,7 +171,7 @@ describe("POST /api/suppliers/products/bulk-import", () => {
       .set("Authorization", "Bearer valid-token")
       .send({
         products: [
-          { name: "Product", sku: "SKU-001", price: 10, stockQuantity: 5, category: "medical" },
+          { name: "Product", sku: "SKU-001", price: 10, stockQuantity: 5, category: "Wound Care" },
         ],
       });
 
@@ -165,7 +183,7 @@ describe("POST /api/suppliers/products/bulk-import", () => {
       .post("/api/suppliers/products/bulk-import")
       .send({
         products: [
-          { name: "Product", sku: "SKU-001", price: 10, stockQuantity: 5, category: "medical" },
+          { name: "Product", sku: "SKU-001", price: 10, stockQuantity: 5, category: "Wound Care" },
         ],
       });
 

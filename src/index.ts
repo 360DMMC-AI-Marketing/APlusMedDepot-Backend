@@ -42,6 +42,7 @@ import bulkImportRoutes from "./routes/bulkImport.routes";
 import paypalRoutes from "./routes/paypal.routes";
 import creditRoutes from "./routes/credit.routes";
 import aiVerificationRoutes from "./routes/aiVerification.routes";
+import categoryRoutes from "./routes/category.routes";
 
 const app = express();
 
@@ -95,6 +96,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get("/api-docs.json", (_req, res) => res.json(swaggerSpec));
 
 // Routes
+app.use("/api/categories", categoryRoutes);
 app.use("/api/users", userProfileRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);

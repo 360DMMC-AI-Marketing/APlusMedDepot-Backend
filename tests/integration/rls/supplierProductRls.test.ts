@@ -199,7 +199,7 @@ beforeAll(async () => {
           account_number: "0000",
           routing_number: "1111",
         },
-        product_categories: ["Medical Supplies"],
+        product_categories: ["Wound Care"],
         status: "approved",
         commission_rate: 15.0,
       })
@@ -231,7 +231,7 @@ beforeAll(async () => {
         sku,
         price,
         stock_quantity: stockQty,
-        category: "Medical Supplies",
+        category: "Wound Care",
         status,
         is_deleted: false,
         images: [],
