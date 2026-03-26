@@ -124,7 +124,7 @@ export class AuthController {
   static async verifyEmail(req: Request, res: Response): Promise<void> {
     const validated = verifyEmailSchema.parse(req.body);
 
-    await AuthService.verifyEmail(validated.token);
+    await AuthService.verifyEmail(validated.code);
 
     res.status(200).json({ message: "Email verified successfully." });
   }

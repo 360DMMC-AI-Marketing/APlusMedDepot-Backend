@@ -493,35 +493,34 @@ export class AuthService {
       .eq("user_id", userId)
       .eq("used", false);
 
-    const token = crypto.randomBytes(32).toString("hex");
+    const code = crypto.randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     const { error: insertError } = await supabaseAdmin
       .from("email_verification_tokens")
-      .insert({ user_id: userId, token, expires_at: expiresAt });
+      .insert({ user_id: userId, token: code, expires_at: expiresAt });
 
     if (insertError) {
-      console.error("Failed to create verification token:", insertError.message);
+      console.error("Failed to create verification code:", insertError.message);
       return;
     }
-
-    const frontendUrl = getEnv().FRONTEND_URL;
-    const verifyUrl = `${frontendUrl}/verify-email?token=${token}`;
 
     const firstName = escapeHtml(user.first_name || "there");
     sendEmail(
       user.email,
-      "Verify Your APlusMedDepot Email",
+      "Your APlusMedDepot Verification Code",
       baseLayout({
         title: "Email Verification",
-        preheader: "Verify your email address",
+        preheader: "Your verification code",
         body: `
             <p>Hi ${firstName},</p>
             <p>Thanks for registering with APlusMedDepot.</p>
-            <p>Please verify your email address by clicking the link below:</p>
-            <p><a href="${verifyUrl}" style="display:inline-block;padding:12px 24px;background-color:#2563eb;color:white;text-decoration:none;border-radius:6px;">Verify Email</a></p>
-            <p>Or copy this link: ${escapeHtml(verifyUrl)}</p>
-            <p>This link expires in 24 hours.</p>
+            <p>Your verification code is:</p>
+            <div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:20px;background-color:#f3f4f6;border-radius:8px;margin:20px 0;">
+              ${code}
+            </div>
+            <p>Enter this code on the verification page to confirm your email address.</p>
+            <p>This code expires in 24 hours.</p>
             <p>If you didn't create an account, you can safely ignore this email.</p>
           `,
       }),
@@ -530,16 +529,20 @@ export class AuthService {
     });
   }
 
-  static async verifyEmail(token: string): Promise<void> {
+  static async verifyEmail(code: string): Promise<void> {
+    if (!/^\d{6}$/.test(code)) {
+      throw new AuthServiceError("INVALID_CODE", "Verification code must be 6 digits", 400);
+    }
+
     const { data: tokenRecord, error: tokenError } = await supabaseAdmin
       .from("email_verification_tokens")
       .select("id, user_id, expires_at")
-      .eq("token", token)
+      .eq("token", code)
       .eq("used", false)
       .single();
 
     if (tokenError || !tokenRecord) {
-      throw new AuthServiceError("INVALID_TOKEN", "Invalid or expired verification token", 400);
+      throw new AuthServiceError("INVALID_CODE", "Invalid or expired verification code", 400);
     }
 
     if (new Date(tokenRecord.expires_at) < new Date()) {
