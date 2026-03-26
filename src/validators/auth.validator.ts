@@ -76,7 +76,7 @@ export const refreshTokenSchema = z.object({
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
 
 export const verifyEmailSchema = z.object({
-  token: z.string().min(1, "Token is required"),
+  code: z.string().regex(/^\d{6}$/, "Verification code must be 6 digits"),
 });
 
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
