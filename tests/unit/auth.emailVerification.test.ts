@@ -93,8 +93,8 @@ describe("AuthService.sendVerificationEmail", () => {
     email_verified: false,
   };
 
-  it("creates token with 24-hour expiry and sends email", async () => {
-    const spy = jest.spyOn(crypto, "randomBytes");
+  it("creates 6-digit code with 24-hour expiry and sends email", async () => {
+    const spy = jest.spyOn(crypto, "randomInt");
 
     mockSupabase.from.mockImplementation((table: string) => {
       const qb = buildQueryBuilder();
@@ -109,13 +109,12 @@ describe("AuthService.sendVerificationEmail", () => {
 
     await AuthService.sendVerificationEmail("user-id-1");
 
-    expect(spy).toHaveBeenCalledWith(32);
     expect(mockSupabase.from).toHaveBeenCalledWith("email_verification_tokens");
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     expect(mockSendEmail).toHaveBeenCalledWith(
       "user@example.com",
-      "Verify Your APlusMedDepot Email",
-      expect.stringContaining("verify-email?token="),
+      "Your APlusMedDepot Verification Code",
+      expect.stringMatching(/\d{6}/),
     );
 
     spy.mockRestore();
@@ -136,7 +135,7 @@ describe("AuthService.sendVerificationEmail", () => {
     await AuthService.sendVerificationEmail("user-id-1");
 
     const htmlArg = mockSendEmail.mock.calls[0][2] as string;
-    expect(htmlArg).toContain("http://localhost:5173/verify-email?token=");
+    expect(htmlArg).toMatch(/\d{6}/);
   });
 
   it("returns silently for already verified user", async () => {
@@ -217,7 +216,7 @@ describe("AuthService.sendVerificationEmail", () => {
 });
 
 describe("AuthService.verifyEmail", () => {
-  const validToken = "b".repeat(64);
+  const validToken = "123456";
   const futureDate = new Date(Date.now() + 86400000).toISOString();
   const pastDate = new Date(Date.now() - 3600000).toISOString();
   const tokenRecord = {
@@ -310,8 +309,8 @@ describe("AuthService.verifyEmail", () => {
       return qb;
     });
 
-    await expect(AuthService.verifyEmail("bad-token")).rejects.toMatchObject({
-      code: "INVALID_TOKEN",
+    await expect(AuthService.verifyEmail("654321")).rejects.toMatchObject({
+      code: "INVALID_CODE",
       statusCode: 400,
     });
   });
@@ -331,16 +330,16 @@ describe("AuthService.verifyEmail", () => {
     });
   });
 
-  it("throws 400 for already-used token", async () => {
+  it("throws 400 for already-used code", async () => {
     mockSupabase.from.mockImplementation(() => {
       const qb = buildQueryBuilder();
-      // used=false filter means used token won't be found
+      // used=false filter means used code won't be found
       qb.single.mockResolvedValue({ data: null, error: { message: "not found" } });
       return qb;
     });
 
     await expect(AuthService.verifyEmail(validToken)).rejects.toMatchObject({
-      code: "INVALID_TOKEN",
+      code: "INVALID_CODE",
       statusCode: 400,
     });
   });
