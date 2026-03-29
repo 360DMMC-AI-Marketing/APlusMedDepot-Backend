@@ -258,6 +258,16 @@ export class AdminSupplierService {
 
     const supplierRow = data as unknown as SupplierRow;
 
+    // Sync users table status with supplier status
+    if (supplierRow.user_id) {
+      const userStatus =
+        newStatus === "approved" ? "approved" : newStatus === "suspended" ? "suspended" : "pending";
+      await supabaseAdmin
+        .from("users")
+        .update({ status: userStatus, updated_at: new Date().toISOString() })
+        .eq("id", supplierRow.user_id);
+    }
+
     // Send email notification based on new status (fire-and-forget)
     if (supplierRow.contact_email) {
       const email = supplierRow.contact_email;

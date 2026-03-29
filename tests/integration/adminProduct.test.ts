@@ -95,7 +95,7 @@ const pendingListResponse = {
       name: "Surgical Gloves",
       sku: "SG-001",
       price: 9.99,
-      category: "PPE",
+      category: "PPE (Personal Protective Equipment)",
       images: null,
       created_at: "2025-01-01T00:00:00.000Z",
       supplier: { id: SUPPLIER_ID, business_name: "MedSupply Co" },
@@ -105,7 +105,7 @@ const pendingListResponse = {
       name: "Face Masks",
       sku: "FM-001",
       price: 14.99,
-      category: "PPE",
+      category: "PPE (Personal Protective Equipment)",
       images: null,
       created_at: "2025-01-02T00:00:00.000Z",
       supplier: { id: SUPPLIER_ID, business_name: "MedSupply Co" },
@@ -122,7 +122,7 @@ const reviewDetail = {
   sku: "SG-001",
   price: 9.99,
   stock_quantity: 100,
-  category: "PPE",
+  category: "PPE (Personal Protective Equipment)",
   status: "pending",
   images: null,
   specifications: null,
@@ -559,7 +559,7 @@ describe("Admin Product Approval API", () => {
             sku: "SG-001",
             price: 9.99,
             stockQuantity: 100,
-            category: "PPE",
+            category: "PPE (Personal Protective Equipment)",
             status: "active",
             supplierName: "MedSupply Co",
             supplierId: SUPPLIER_ID,
@@ -594,13 +594,15 @@ describe("Admin Product Approval API", () => {
       });
 
       await request(app)
-        .get("/api/admin/products?status=pending&category=PPE&search=glove&page=2&limit=10")
+        .get(
+          "/api/admin/products?status=pending&category=PPE+%28Personal+Protective+Equipment%29&search=glove&page=2&limit=10",
+        )
         .set("Authorization", "Bearer valid-token");
 
       expect(mockListProducts).toHaveBeenCalledWith(
         expect.objectContaining({
           status: "pending",
-          category: "PPE",
+          category: "PPE (Personal Protective Equipment)",
           search: "glove",
           page: 2,
           limit: 10,
@@ -640,7 +642,7 @@ describe("Admin Product Approval API", () => {
       sku: "SG-001",
       price: 9.99,
       stockQuantity: 100,
-      category: "PPE",
+      category: "PPE (Personal Protective Equipment)",
       status: "active",
       images: null,
       specifications: null,

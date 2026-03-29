@@ -218,7 +218,7 @@ beforeAllOrSkip(async () => {
       phone: "555-0001",
       address: { street: "123 A St", city: "City A", state: "CA", zip: "90001", country: "US" },
       bank_account_info: { bank_name: "Bank A", account_number: "1234", routing_number: "5678" },
-      product_categories: ["Medical Supplies"],
+      product_categories: ["Wound Care"],
       status: "approved",
       commission_rate: 15.0,
     })
@@ -241,7 +241,7 @@ beforeAllOrSkip(async () => {
       phone: "555-0002",
       address: { street: "456 B St", city: "City B", state: "NY", zip: "10001", country: "US" },
       bank_account_info: { bank_name: "Bank B", account_number: "9876", routing_number: "5432" },
-      product_categories: ["Surgical Supplies"],
+      product_categories: ["Gloves"],
       status: "approved",
       commission_rate: 12.0,
     })
@@ -266,7 +266,7 @@ beforeAllOrSkip(async () => {
       sku: "SKU-X-001",
       price: 100.0,
       stock_quantity: 50,
-      category: "Medical Supplies",
+      category: "Wound Care",
       status: "active",
       is_deleted: false,
     })
@@ -287,7 +287,7 @@ beforeAllOrSkip(async () => {
       sku: "SKU-Y-002",
       price: 200.0,
       stock_quantity: 30,
-      category: "Surgical Supplies",
+      category: "Gloves",
       status: "active",
       is_deleted: false,
     })
@@ -308,7 +308,7 @@ beforeAllOrSkip(async () => {
       sku: "SKU-Z-003",
       price: 150.0,
       stock_quantity: 20,
-      category: "Medical Supplies",
+      category: "Wound Care",
       status: "pending",
       is_deleted: false,
     })
@@ -329,7 +329,7 @@ beforeAllOrSkip(async () => {
       sku: "SKU-W-004",
       price: 175.0,
       stock_quantity: 15,
-      category: "Surgical Supplies",
+      category: "Gloves",
       status: "pending",
       is_deleted: false,
     })

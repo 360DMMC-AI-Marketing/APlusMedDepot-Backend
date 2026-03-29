@@ -149,7 +149,12 @@ describe("Platform Analytics API", () => {
     it("returns category revenue breakdown", async () => {
       authAs(adminUser);
       mockGetRevenueByCategory.mockResolvedValue([
-        { category: "PPE", totalSales: 1000, orderCount: 20, unitsSold: 100 },
+        {
+          category: "PPE (Personal Protective Equipment)",
+          totalSales: 1000,
+          orderCount: 20,
+          unitsSold: 100,
+        },
       ]);
 
       const res = await request(app)
@@ -157,7 +162,7 @@ describe("Platform Analytics API", () => {
         .set("Authorization", "Bearer valid-token");
 
       expect(res.status).toBe(200);
-      expect(res.body[0].category).toBe("PPE");
+      expect(res.body[0].category).toBe("PPE (Personal Protective Equipment)");
     });
   });
 
@@ -205,7 +210,7 @@ describe("Platform Analytics API", () => {
         {
           productId: "p1",
           productName: "Gloves",
-          category: "PPE",
+          category: "PPE (Personal Protective Equipment)",
           supplierName: "MedCo",
           totalSold: 100,
           totalRevenue: 999,

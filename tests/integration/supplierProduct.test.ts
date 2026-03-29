@@ -97,7 +97,7 @@ const sampleProduct = {
   sku: "SG-001",
   price: 29.99,
   stockQuantity: 100,
-  category: "Surgical Supplies",
+  category: "Wound Care",
   status: "pending",
   images: [],
   specifications: { material: "Latex" },
@@ -184,13 +184,13 @@ describe("GET /api/suppliers/products", () => {
     });
 
     const res = await request(app)
-      .get("/api/suppliers/products?category=Surgical+Supplies")
+      .get("/api/suppliers/products?category=Wound+Care")
       .set("Authorization", "Bearer valid-token");
 
     expect(res.status).toBe(200);
     expect(mockList).toHaveBeenCalledWith(
       SUPPLIER_ID,
-      expect.objectContaining({ category: "Surgical Supplies" }),
+      expect.objectContaining({ category: "Wound Care" }),
     );
   });
 
@@ -820,11 +820,11 @@ describe("GET /api/suppliers/products — advanced filters", () => {
     mockGetSupplierIdFromUserId.mockResolvedValue(SUPPLIER_ID);
     mockList.mockResolvedValue({
       ...makeListResponse([sampleProduct]),
-      filters_applied: { status: "active", category: "Surgical Supplies", in_stock: true },
+      filters_applied: { status: "active", category: "Wound Care", in_stock: true },
     });
 
     const res = await request(app)
-      .get("/api/suppliers/products?status=active&category=Surgical+Supplies&in_stock=true")
+      .get("/api/suppliers/products?status=active&category=Wound+Care&in_stock=true")
       .set("Authorization", "Bearer valid-token");
 
     expect(res.status).toBe(200);
@@ -832,7 +832,7 @@ describe("GET /api/suppliers/products — advanced filters", () => {
       SUPPLIER_ID,
       expect.objectContaining({
         status: "active",
-        category: "Surgical Supplies",
+        category: "Wound Care",
         in_stock: true,
       }),
     );

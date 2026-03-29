@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { supabaseAdmin } from "../config/supabase";
 import { AppError } from "../utils/errors";
+import { categoryEnum } from "../constants/categories";
 import type { BulkProductInput, BulkImportResult } from "../types/bulkImport.types";
 
 const productSchema = z.object({
@@ -10,7 +11,7 @@ const productSchema = z.object({
   price: z.number().positive(),
   originalPrice: z.number().positive().optional().nullable(),
   stockQuantity: z.number().int().min(0),
-  category: z.string().min(1).max(100),
+  category: z.enum(categoryEnum),
   specifications: z.record(z.string(), z.string()).optional(),
 });
 

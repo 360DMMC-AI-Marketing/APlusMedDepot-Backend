@@ -74,7 +74,7 @@ const baseProduct = {
   price: 39.99,
   originalPrice: null as number | null,
   stockQuantity: 100,
-  category: "medical",
+  category: "Wound Care",
   status: "active",
   images: [],
   specifications: {},
