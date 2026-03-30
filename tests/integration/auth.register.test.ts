@@ -97,6 +97,7 @@ describe("POST /api/auth/register", () => {
       "Acme Medical",
       "555-0100",
       "customer",
+      undefined,
     );
   });
 
@@ -124,6 +125,7 @@ describe("POST /api/auth/register", () => {
       null,
       "555-0200",
       "supplier",
+      expect.objectContaining({}),
     );
   });
 

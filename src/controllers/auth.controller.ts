@@ -18,14 +18,26 @@ export class AuthController {
 
     const companyName = "companyName" in validated ? validated.companyName : null;
 
+    const supplierDetails =
+      validated.role === "supplier"
+        ? {
+            taxId: "taxId" in validated ? validated.taxId : undefined,
+            businessAddress: "businessAddress" in validated ? validated.businessAddress : undefined,
+            yearsInBusiness: "yearsInBusiness" in validated ? validated.yearsInBusiness : undefined,
+            businessLicense: "businessLicense" in validated ? validated.businessLicense : undefined,
+            categories: "categories" in validated ? validated.categories : undefined,
+          }
+        : undefined;
+
     const { user } = await AuthService.signUp(
       validated.email,
       validated.password,
       validated.firstName,
       validated.lastName,
-      companyName,
+      companyName ?? null,
       validated.phone ?? null,
       validated.role,
+      supplierDetails,
     );
 
     res.status(201).json({
