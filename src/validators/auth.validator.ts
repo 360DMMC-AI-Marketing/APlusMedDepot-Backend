@@ -25,6 +25,7 @@ export const registerCustomerSchema = z.object({
     .max(200, "Company name must be 200 characters or less"),
   phone: z.string().optional(),
   role: z.literal("customer"),
+  captchaToken: z.string().optional(),
 });
 
 export const registerSupplierSchema = z.object({
@@ -46,6 +47,7 @@ export const registerSupplierSchema = z.object({
   yearsInBusiness: z.coerce.number().int().min(0).optional(),
   businessLicense: z.string().max(100).optional(),
   categories: z.array(z.string()).optional(),
+  captchaToken: z.string().optional(),
 });
 
 export const registerSchema = z.discriminatedUnion("role", [
@@ -58,6 +60,7 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
+  captchaToken: z.string().optional(),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
