@@ -182,6 +182,7 @@ describe("Auth Lifecycle Flow", () => {
       "MedCorp",
       null,
       "customer",
+      undefined,
     );
   });
 
