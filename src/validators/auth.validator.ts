@@ -40,6 +40,12 @@ export const registerSupplierSchema = z.object({
     .max(50, "Last name must be 50 characters or less"),
   phone: z.string().optional(),
   role: z.literal("supplier"),
+  companyName: z.string().max(255).optional(),
+  taxId: z.string().max(50).optional(),
+  businessAddress: z.string().max(500).optional(),
+  yearsInBusiness: z.coerce.number().int().min(0).optional(),
+  businessLicense: z.string().max(100).optional(),
+  categories: z.array(z.string()).optional(),
 });
 
 export const registerSchema = z.discriminatedUnion("role", [

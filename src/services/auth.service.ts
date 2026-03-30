@@ -120,6 +120,13 @@ export class AuthService {
     companyName: string | null,
     phone: string | null,
     role: "customer" | "supplier",
+    supplierDetails?: {
+      taxId?: string;
+      businessAddress?: string;
+      yearsInBusiness?: number;
+      businessLicense?: string;
+      categories?: string[];
+    },
   ): Promise<{ user: AuthUser; session: AuthSession }> {
     try {
       const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -159,14 +166,31 @@ export class AuthService {
       if (role === "supplier") {
         const baseName = companyName?.trim() || `${firstName} ${lastName}`.trim();
         const businessName = baseName.length > 0 ? baseName : "Pending Supplier";
+        const supplierRow: Record<string, unknown> = {
+          user_id: authUser.id,
+          business_name: businessName,
+          contact_name: `${firstName} ${lastName}`.trim(),
+          contact_email: email,
+          phone,
+          status: "pending",
+        };
+        if (supplierDetails?.taxId) supplierRow.tax_id = supplierDetails.taxId;
+        if (supplierDetails?.businessAddress) {
+          supplierRow.address = {
+            street: supplierDetails.businessAddress,
+            city: "",
+            state: "",
+            zip: "",
+            country: "US",
+          };
+        }
+        if (supplierDetails?.yearsInBusiness !== undefined)
+          supplierRow.years_in_business = supplierDetails.yearsInBusiness;
+        if (supplierDetails?.categories?.length)
+          supplierRow.product_categories = supplierDetails.categories;
         const { error: supplierError } = await supabaseAdmin
           .from("suppliers")
-          .insert({
-            user_id: authUser.id,
-            business_name: businessName,
-            phone,
-            status: "pending",
-          })
+          .insert(supplierRow)
           .select("id")
           .single();
 
