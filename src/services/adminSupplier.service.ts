@@ -71,7 +71,7 @@ const COMMISSION_SELECT_FIELDS =
   "id, order_item_id, supplier_id, sale_amount, commission_rate, commission_amount, platform_amount, supplier_payout, supplier_amount, status, confirmed_at, created_at, updated_at";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  pending: ["under_review"],
+  pending: ["under_review", "approved", "rejected"],
   under_review: ["approved", "rejected", "needs_revision"],
   needs_revision: ["under_review"],
   approved: ["suspended"],
@@ -257,6 +257,20 @@ export class AdminSupplierService {
     }
 
     const supplierRow = data as unknown as SupplierRow;
+
+    // Sync users table status with supplier status
+    if (supplierRow.user_id) {
+      const userStatus =
+        newStatus === "approved"
+          ? "approved"
+          : newStatus === "suspended" || newStatus === "rejected"
+            ? "suspended"
+            : "pending";
+      await supabaseAdmin
+        .from("users")
+        .update({ status: userStatus, updated_at: new Date().toISOString() })
+        .eq("id", supplierRow.user_id);
+    }
 
     // Send email notification based on new status (fire-and-forget)
     if (supplierRow.contact_email) {

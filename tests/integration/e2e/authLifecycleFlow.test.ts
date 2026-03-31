@@ -182,19 +182,18 @@ describe("Auth Lifecycle Flow", () => {
       "MedCorp",
       null,
       "customer",
+      undefined,
     );
   });
 
-  it("Step 2: Verify email with token", async () => {
+  it("Step 2: Verify email with code", async () => {
     mockVerifyEmail.mockResolvedValue(undefined);
 
-    const res = await request(app)
-      .post("/api/auth/verify-email")
-      .send({ token: "verify-token-abc" });
+    const res = await request(app).post("/api/auth/verify-email").send({ code: "123456" });
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe("Email verified successfully.");
-    expect(mockVerifyEmail).toHaveBeenCalledWith("verify-token-abc");
+    expect(mockVerifyEmail).toHaveBeenCalledWith("123456");
   });
 
   it("Step 3: User logs in after admin approval", async () => {

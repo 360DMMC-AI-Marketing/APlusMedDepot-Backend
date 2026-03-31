@@ -44,42 +44,47 @@ beforeEach(() => {
 });
 
 describe("POST /api/auth/verify-email", () => {
-  it("returns 200 with success message for valid token", async () => {
+  it("returns 200 with success message for valid code", async () => {
     mockVerifyEmail.mockResolvedValue(undefined);
 
-    const res = await request(app)
-      .post("/api/auth/verify-email")
-      .send({ token: "valid-verification-token" });
+    const res = await request(app).post("/api/auth/verify-email").send({ code: "123456" });
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe("Email verified successfully.");
-    expect(mockVerifyEmail).toHaveBeenCalledWith("valid-verification-token");
+    expect(mockVerifyEmail).toHaveBeenCalledWith("123456");
   });
 
-  it("returns 400 for invalid/garbage token", async () => {
-    const error = new Error("Invalid or expired verification token");
+  it("returns 400 for invalid code (not found in DB)", async () => {
+    const error = new Error("Invalid or expired verification code");
     (error as Error & { statusCode: number; code: string }).statusCode = 400;
-    (error as Error & { statusCode: number; code: string }).code = "INVALID_TOKEN";
+    (error as Error & { statusCode: number; code: string }).code = "INVALID_CODE";
     mockVerifyEmail.mockRejectedValue(error);
 
-    const res = await request(app).post("/api/auth/verify-email").send({ token: "garbage-token" });
+    const res = await request(app).post("/api/auth/verify-email").send({ code: "654321" });
 
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 for expired token", async () => {
+  it("returns 400 for expired code", async () => {
     const error = new Error("Verification token has expired. Please request a new one.");
     (error as Error & { statusCode: number; code: string }).statusCode = 400;
     (error as Error & { statusCode: number; code: string }).code = "TOKEN_EXPIRED";
     mockVerifyEmail.mockRejectedValue(error);
 
-    const res = await request(app).post("/api/auth/verify-email").send({ token: "expired-token" });
+    const res = await request(app).post("/api/auth/verify-email").send({ code: "111111" });
 
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 for missing token", async () => {
+  it("returns 400 for missing code", async () => {
     const res = await request(app).post("/api/auth/verify-email").send({});
+
+    expect(res.status).toBe(400);
+    expect(mockVerifyEmail).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for non-numeric code", async () => {
+    const res = await request(app).post("/api/auth/verify-email").send({ code: "abcdef" });
 
     expect(res.status).toBe(400);
     expect(mockVerifyEmail).not.toHaveBeenCalled();
@@ -88,7 +93,7 @@ describe("POST /api/auth/verify-email", () => {
   it("works without authentication (no Bearer token needed)", async () => {
     mockVerifyEmail.mockResolvedValue(undefined);
 
-    const res = await request(app).post("/api/auth/verify-email").send({ token: "some-token" });
+    const res = await request(app).post("/api/auth/verify-email").send({ code: "123456" });
 
     // Should not return 401
     expect(res.status).not.toBe(401);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { categoryEnum } from "../constants/categories";
 
 const supplierProductStatusEnum = z.enum([
   "all",
@@ -31,7 +32,7 @@ export const supplierProductQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: supplierProductStatusEnum.optional(),
   search: z.string().optional(),
-  category: z.string().optional(),
+  category: z.enum(categoryEnum).optional(),
   sort_by: z.enum(["name", "price", "stock_quantity", "created_at"]).default("created_at"),
   sort_order: z.enum(["asc", "desc"]).default("desc"),
   in_stock: z
@@ -56,7 +57,7 @@ export const createSupplierProductSchema = z.object({
     .number()
     .int("Stock quantity must be an integer")
     .nonnegative("Stock quantity must be non-negative"),
-  category: z.string().optional(),
+  category: z.enum(categoryEnum).optional(),
   specifications: z.record(z.string(), z.string()).optional(),
   weight: z.number().positive("Weight must be positive").optional(),
   dimensions: dimensionsSchema.optional(),
@@ -71,7 +72,7 @@ export const updateSupplierProductSchema = z.object({
   price: priceSchema.optional(),
   original_price: z.number().positive().optional().nullable(),
   stock_quantity: z.number().int().nonnegative().optional(),
-  category: z.string().optional(),
+  category: z.enum(categoryEnum).optional(),
   specifications: z.record(z.string(), z.string()).optional(),
   weight: z.number().positive().optional(),
   dimensions: dimensionsSchema.optional(),
