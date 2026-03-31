@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 
 import { AuthController } from "../controllers/auth.controller";
 import { authenticate } from "../middleware/auth";
+import { verifyCaptcha } from "../middleware/captcha";
 
 const router = Router();
 
@@ -135,7 +136,7 @@ const passwordRateLimiter = rateLimit({
  *       429:
  *         description: Rate limit exceeded
  */
-router.post("/register", registerRateLimiter, AuthController.register);
+router.post("/register", registerRateLimiter, verifyCaptcha, AuthController.register);
 
 /**
  * @openapi
@@ -200,7 +201,7 @@ router.post("/register", registerRateLimiter, AuthController.register);
  *       429:
  *         description: Rate limit exceeded
  */
-router.post("/login", loginRateLimiter, AuthController.login);
+router.post("/login", loginRateLimiter, verifyCaptcha, AuthController.login);
 
 /**
  * @openapi

@@ -28,6 +28,8 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().default(""),
   FRONTEND_URL: z.string().default("http://localhost:5173"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  RECAPTCHA_SECRET_KEY: z.string().default(""),
+  TURNSTILE_SECRET_KEY: z.string().default(""),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
