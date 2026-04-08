@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { decode } from "jsonwebtoken";
 
 import { getEnv } from "../config/env";
-import { supabaseAdmin } from "../config/supabase";
+import { supabaseAdmin, supabaseAuth } from "../config/supabase";
 import { sendEmail } from "../services/email.service";
 import { baseLayout, escapeHtml } from "../templates/baseLayout";
 import type { AuthSession, AuthUser } from "../types/auth.types";
@@ -200,7 +200,7 @@ export class AuthService {
         );
       }
 
-      const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
         email,
         password,
       });
@@ -230,7 +230,7 @@ export class AuthService {
     password: string,
   ): Promise<{ user: AuthUser; session: AuthSession }> {
     try {
-      const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
         email,
         password,
       });
@@ -626,7 +626,7 @@ export class AuthService {
 
   static async refreshSession(refreshToken: string): Promise<AuthSession> {
     try {
-      const { data, error } = await supabaseAdmin.auth.refreshSession({
+      const { data, error } = await supabaseAuth.auth.refreshSession({
         refresh_token: refreshToken,
       });
       raiseIfError(

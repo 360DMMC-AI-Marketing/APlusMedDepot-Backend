@@ -153,6 +153,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public;
 
 -- 3g. lock_products_for_update (from migration 018)
+-- SECURITY DEFINER required: SET search_path prevents inlining, which changes
+-- how FOR UPDATE interacts with RLS. Running as owner (postgres) ensures bypass.
 CREATE OR REPLACE FUNCTION lock_products_for_update(product_ids UUID[])
 RETURNS TABLE(id UUID, stock_quantity INTEGER) AS $$
   SELECT p.id, p.stock_quantity
@@ -160,10 +162,11 @@ RETURNS TABLE(id UUID, stock_quantity INTEGER) AS $$
   WHERE p.id = ANY(product_ids)
   ORDER BY p.id
   FOR UPDATE;
-$$ LANGUAGE sql
+$$ LANGUAGE sql SECURITY DEFINER
 SET search_path = public;
 
 -- 3h. increment_supplier_balance (from migration 021)
+-- SECURITY DEFINER: writes to suppliers table, needs to bypass RLS.
 CREATE OR REPLACE FUNCTION increment_supplier_balance(
   p_supplier_id UUID,
   p_amount NUMERIC(12,2)
@@ -177,10 +180,11 @@ BEGIN
   RETURNING current_balance INTO new_balance;
   RETURN new_balance;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public;
 
 -- 3i. deduct_credit (from migration 030)
+-- SECURITY DEFINER: writes to user_credit table, needs to bypass RLS.
 CREATE OR REPLACE FUNCTION deduct_credit(p_user_id UUID, p_amount NUMERIC)
 RETURNS BOOLEAN AS $$
 DECLARE
@@ -195,10 +199,11 @@ BEGIN
   GET DIAGNOSTICS rows_affected = ROW_COUNT;
   RETURN rows_affected > 0;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public;
 
 -- 3j. restore_credit (from migration 030)
+-- SECURITY DEFINER: writes to user_credit table, needs to bypass RLS.
 CREATE OR REPLACE FUNCTION restore_credit(p_user_id UUID, p_amount NUMERIC)
 RETURNS VOID AS $$
 BEGIN
@@ -207,7 +212,7 @@ BEGIN
       updated_at = now()
   WHERE user_id = p_user_id;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public;
 
 
