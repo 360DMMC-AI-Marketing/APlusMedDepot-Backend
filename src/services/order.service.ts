@@ -100,16 +100,31 @@ export class OrderService {
 
     const { data: products, error: productsError } = await supabaseAdmin
       .from("products")
-      .select("id, name, price, stock_quantity, status, is_deleted, supplier_id")
+      .select(
+        "id, name, price, stock_quantity, status, is_deleted, supplier_id, suppliers(is_sample)",
+      )
       .in("id", productIds);
 
     if (productsError) {
       throw new AppError(productsError.message, 500, "DATABASE_ERROR");
     }
 
-    const productMap = new Map<string, ProductRow>();
-    for (const p of (products ?? []) as unknown as ProductRow[]) {
+    type ProductWithSupplier = ProductRow & {
+      suppliers: { is_sample: boolean } | null;
+    };
+
+    const productMap = new Map<string, ProductWithSupplier>();
+    for (const p of (products ?? []) as unknown as ProductWithSupplier[]) {
       productMap.set(p.id, p);
+    }
+
+    // Reject carts containing items from sample/demo suppliers before any
+    // stock decrement so we never need to compensate for a sample-only failure.
+    for (const item of cartItems) {
+      const product = productMap.get(item.product_id);
+      if (product?.suppliers?.is_sample) {
+        throw new AppError("Sorry, this product is currently out of stock", 400, "OUT_OF_STOCK");
+      }
     }
 
     // ── Step 4: Validate all products ───────────────────────────────
