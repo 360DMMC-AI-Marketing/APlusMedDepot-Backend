@@ -212,7 +212,7 @@ export class AdminSupplierService {
     // Fetch current supplier
     const { data: currentData, error: fetchError } = await supabaseAdmin
       .from("suppliers")
-      .select("id, status")
+      .select("id, status, user_id")
       .eq("id", supplierId)
       .single();
 
@@ -220,7 +220,7 @@ export class AdminSupplierService {
       throw notFound("Supplier");
     }
 
-    const current = currentData as { id: string; status: string };
+    const current = currentData as { id: string; status: string; user_id: string | null };
     const currentStatus = current.status;
 
     // Validate transition
@@ -233,6 +233,27 @@ export class AdminSupplierService {
     const updateData: Record<string, unknown> = { status: newStatus };
 
     if (newStatus === "approved") {
+      // Block approval until the vendor has verified their email, so the
+      // email_verification flow is not bypassed by admin action.
+      if (current.user_id) {
+        const { data: userData, error: userError } = await supabaseAdmin
+          .from("users")
+          .select("email_verified")
+          .eq("id", current.user_id)
+          .single();
+
+        if (userError || !userData) {
+          throw new AppError("Failed to verify vendor email status", 500, "DATABASE_ERROR");
+        }
+
+        const { email_verified } = userData as { email_verified: boolean | null };
+        if (!email_verified) {
+          throw badRequest(
+            "Vendor must verify their email address before the application can be approved",
+          );
+        }
+      }
+
       updateData.commission_rate = options?.commissionRate || 15;
       updateData.approved_at = new Date().toISOString();
     }
