@@ -64,7 +64,7 @@ export class CheckoutService {
     const { data: products, error: productsError } = await supabaseAdmin
       .from("products")
       .select(
-        "id, name, price, stock_quantity, status, is_deleted, supplier_id, suppliers(business_name)",
+        "id, name, price, stock_quantity, status, is_deleted, supplier_id, suppliers(business_name, is_sample)",
       )
       .in("id", productIds);
 
@@ -82,7 +82,7 @@ export class CheckoutService {
         status: string;
         is_deleted: boolean;
         supplier_id: string;
-        suppliers: { business_name: string } | null;
+        suppliers: { business_name: string; is_sample: boolean } | null;
       }
     >();
 
@@ -94,9 +94,17 @@ export class CheckoutService {
       status: string;
       is_deleted: boolean;
       supplier_id: string;
-      suppliers: { business_name: string } | null;
+      suppliers: { business_name: string; is_sample: boolean } | null;
     }[]) {
       productMap.set(p.id, p);
+    }
+
+    // Reject carts containing items from sample/demo suppliers.
+    for (const item of cartItems) {
+      const product = productMap.get(item.product_id);
+      if (product?.suppliers?.is_sample) {
+        throw new AppError("Sorry, this product is currently out of stock", 400, "OUT_OF_STOCK");
+      }
     }
 
     // 3. Validate each cart item
