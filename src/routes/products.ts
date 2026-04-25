@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 
 import { ProductController } from "../controllers/product.controller";
-import { authenticate } from "../middleware/auth";
+import { authenticate, optionalAuthenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
 import { uploadSingle } from "../middleware/upload";
 import { checkStock } from "../utils/inventory";
@@ -73,7 +73,7 @@ const router = Router();
  *       401:
  *         description: Unauthorized
  */
-router.get("/", ProductController.list);
+router.get("/", optionalAuthenticate, ProductController.list);
 
 /**
  * @openapi
@@ -120,7 +120,7 @@ router.get("/", ProductController.list);
  *       401:
  *         description: Unauthorized
  */
-router.get("/search", ProductController.search);
+router.get("/search", optionalAuthenticate, ProductController.search);
 
 /**
  * @openapi
@@ -186,7 +186,7 @@ router.get("/:id/stock", async (req: Request, res: Response) => {
  *       404:
  *         description: Product not found
  */
-router.get("/:id", ProductController.getById);
+router.get("/:id", optionalAuthenticate, ProductController.getById);
 
 /**
  * @openapi
