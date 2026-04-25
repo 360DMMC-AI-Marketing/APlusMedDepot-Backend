@@ -102,18 +102,24 @@ describe("Security Audit", () => {
   describe("SQL injection protection", () => {
     it("search with SQL injection returns empty results, not error", async () => {
       // Mock search to return empty results (simulating parameterized queries)
-      mockSearch.mockResolvedValue({ products: [], total: 0, page: 1, limit: 20 });
+      mockSearch.mockResolvedValue({
+        data: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      });
 
       const res = await request(app).get(
         "/api/products/search?q=" + encodeURIComponent("'; DROP TABLE products; --"),
       );
 
       expect(res.status).toBe(200);
-      expect(res.body.products).toEqual([]);
+      expect(res.body.data).toEqual([]);
     });
 
     it("search with script tags returns empty results", async () => {
-      mockSearch.mockResolvedValue({ products: [], total: 0, page: 1, limit: 20 });
+      mockSearch.mockResolvedValue({
+        data: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      });
 
       const res = await request(app).get(
         "/api/products/search?q=" + encodeURIComponent('<script>alert("xss")</script>'),
@@ -201,7 +207,7 @@ describe("Security Audit", () => {
 
     it("product list does not contain sensitive fields in mock response", async () => {
       const mockResponse = {
-        products: [
+        data: [
           {
             id: "prod-1",
             name: "Test Product",
@@ -209,9 +215,7 @@ describe("Security Audit", () => {
             status: "active",
           },
         ],
-        total: 1,
-        page: 1,
-        limit: 20,
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
       };
       mockList.mockResolvedValue(mockResponse);
 
