@@ -37,3 +37,31 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     });
   }
 }
+
+export async function optionalAuthenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    next();
+    return;
+  }
+
+  const token = authHeader.slice(7);
+  if (!token) {
+    next();
+    return;
+  }
+
+  try {
+    const user = await AuthService.verifyToken(token);
+    if (user.status === "approved") {
+      req.user = user;
+    }
+  } catch {
+    // Invalid/expired token — proceed as anonymous
+  }
+  next();
+}
