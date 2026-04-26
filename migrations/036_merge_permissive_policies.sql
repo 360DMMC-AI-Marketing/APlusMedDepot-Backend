@@ -27,19 +27,23 @@ DROP POLICY IF EXISTS users_select_own ON users;
 DROP POLICY IF EXISTS users_update_own ON users;
 DROP POLICY IF EXISTS users_admin_all ON users;
 
+DROP POLICY IF EXISTS users_select ON users;
 CREATE POLICY users_select ON users
   FOR SELECT TO authenticated
   USING (id = (SELECT auth.uid())::uuid OR (SELECT is_admin()));
 
+DROP POLICY IF EXISTS users_update ON users;
 CREATE POLICY users_update ON users
   FOR UPDATE TO authenticated
   USING (id = (SELECT auth.uid())::uuid OR (SELECT is_admin()))
   WITH CHECK (id = (SELECT auth.uid())::uuid OR (SELECT is_admin()));
 
+DROP POLICY IF EXISTS users_admin_insert ON users;
 CREATE POLICY users_admin_insert ON users
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS users_admin_delete ON users;
 CREATE POLICY users_admin_delete ON users
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -56,15 +60,18 @@ DROP POLICY IF EXISTS suppliers_update_own ON suppliers;
 DROP POLICY IF EXISTS suppliers_insert_own ON suppliers;
 DROP POLICY IF EXISTS suppliers_admin_all ON suppliers;
 
+DROP POLICY IF EXISTS suppliers_select ON suppliers;
 CREATE POLICY suppliers_select ON suppliers
   FOR SELECT TO authenticated
   USING (user_id = (SELECT auth.uid())::uuid OR (SELECT is_admin()));
 
+DROP POLICY IF EXISTS suppliers_update ON suppliers;
 CREATE POLICY suppliers_update ON suppliers
   FOR UPDATE TO authenticated
   USING (user_id = (SELECT auth.uid())::uuid OR (SELECT is_admin()))
   WITH CHECK (user_id = (SELECT auth.uid())::uuid OR (SELECT is_admin()));
 
+DROP POLICY IF EXISTS suppliers_insert ON suppliers;
 CREATE POLICY suppliers_insert ON suppliers
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -78,6 +85,7 @@ CREATE POLICY suppliers_insert ON suppliers
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS suppliers_admin_delete ON suppliers;
 CREATE POLICY suppliers_admin_delete ON suppliers
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -101,6 +109,7 @@ DROP POLICY IF EXISTS products_admin_all ON products;
 -- SELECT: NO "TO authenticated" — anonymous users must browse the marketplace.
 -- Anonymous: get_supplier_id() → NULL (supplier_id = NULL is false), is_admin() → false.
 -- Only (status = 'active' AND is_deleted = false) matches for anon/customers.
+DROP POLICY IF EXISTS products_select ON products;
 CREATE POLICY products_select ON products
   FOR SELECT
   USING (
@@ -109,6 +118,7 @@ CREATE POLICY products_select ON products
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS products_insert ON products;
 CREATE POLICY products_insert ON products
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -116,11 +126,13 @@ CREATE POLICY products_insert ON products
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS products_update ON products;
 CREATE POLICY products_update ON products
   FOR UPDATE TO authenticated
   USING (supplier_id = (SELECT get_supplier_id()) OR (SELECT is_admin()))
   WITH CHECK (supplier_id = (SELECT get_supplier_id()) OR (SELECT is_admin()));
 
+DROP POLICY IF EXISTS products_admin_delete ON products;
 CREATE POLICY products_admin_delete ON products
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -136,6 +148,7 @@ DROP POLICY IF EXISTS orders_customer_select ON orders;
 DROP POLICY IF EXISTS orders_supplier_select ON orders;
 DROP POLICY IF EXISTS orders_admin_all ON orders;
 
+DROP POLICY IF EXISTS orders_select ON orders;
 CREATE POLICY orders_select ON orders
   FOR SELECT TO authenticated
   USING (
@@ -144,15 +157,18 @@ CREATE POLICY orders_select ON orders
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS orders_admin_insert ON orders;
 CREATE POLICY orders_admin_insert ON orders
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS orders_admin_update ON orders;
 CREATE POLICY orders_admin_update ON orders
   FOR UPDATE TO authenticated
   USING ((SELECT is_admin()))
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS orders_admin_delete ON orders;
 CREATE POLICY orders_admin_delete ON orders
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -168,6 +184,7 @@ DROP POLICY IF EXISTS order_items_customer_select ON order_items;
 DROP POLICY IF EXISTS order_items_supplier_select ON order_items;
 DROP POLICY IF EXISTS order_items_admin_all ON order_items;
 
+DROP POLICY IF EXISTS order_items_select ON order_items;
 CREATE POLICY order_items_select ON order_items
   FOR SELECT TO authenticated
   USING (
@@ -176,15 +193,18 @@ CREATE POLICY order_items_select ON order_items
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS order_items_admin_insert ON order_items;
 CREATE POLICY order_items_admin_insert ON order_items
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS order_items_admin_update ON order_items;
 CREATE POLICY order_items_admin_update ON order_items
   FOR UPDATE TO authenticated
   USING ((SELECT is_admin()))
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS order_items_admin_delete ON order_items;
 CREATE POLICY order_items_admin_delete ON order_items
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -201,6 +221,7 @@ DROP POLICY IF EXISTS order_status_history_customer_select ON order_status_histo
 DROP POLICY IF EXISTS order_status_history_supplier_select ON order_status_history;
 DROP POLICY IF EXISTS order_status_history_admin_all ON order_status_history;
 
+DROP POLICY IF EXISTS order_status_history_select ON order_status_history;
 CREATE POLICY order_status_history_select ON order_status_history
   FOR SELECT TO authenticated
   USING (
@@ -209,15 +230,18 @@ CREATE POLICY order_status_history_select ON order_status_history
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS order_status_history_admin_insert ON order_status_history;
 CREATE POLICY order_status_history_admin_insert ON order_status_history
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS order_status_history_admin_update ON order_status_history;
 CREATE POLICY order_status_history_admin_update ON order_status_history
   FOR UPDATE TO authenticated
   USING ((SELECT is_admin()))
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS order_status_history_admin_delete ON order_status_history;
 CREATE POLICY order_status_history_admin_delete ON order_status_history
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -232,6 +256,7 @@ CREATE POLICY order_status_history_admin_delete ON order_status_history
 DROP POLICY IF EXISTS payments_customer_select ON payments;
 DROP POLICY IF EXISTS payments_admin_all ON payments;
 
+DROP POLICY IF EXISTS payments_select ON payments;
 CREATE POLICY payments_select ON payments
   FOR SELECT TO authenticated
   USING (
@@ -239,15 +264,18 @@ CREATE POLICY payments_select ON payments
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS payments_admin_insert ON payments;
 CREATE POLICY payments_admin_insert ON payments
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS payments_admin_update ON payments;
 CREATE POLICY payments_admin_update ON payments
   FOR UPDATE TO authenticated
   USING ((SELECT is_admin()))
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS payments_admin_delete ON payments;
 CREATE POLICY payments_admin_delete ON payments
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -262,6 +290,7 @@ CREATE POLICY payments_admin_delete ON payments
 DROP POLICY IF EXISTS commissions_supplier_select ON commissions;
 DROP POLICY IF EXISTS commissions_admin_all ON commissions;
 
+DROP POLICY IF EXISTS commissions_select ON commissions;
 CREATE POLICY commissions_select ON commissions
   FOR SELECT TO authenticated
   USING (
@@ -269,15 +298,18 @@ CREATE POLICY commissions_select ON commissions
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS commissions_admin_insert ON commissions;
 CREATE POLICY commissions_admin_insert ON commissions
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS commissions_admin_update ON commissions;
 CREATE POLICY commissions_admin_update ON commissions
   FOR UPDATE TO authenticated
   USING ((SELECT is_admin()))
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS commissions_admin_delete ON commissions;
 CREATE POLICY commissions_admin_delete ON commissions
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -292,6 +324,7 @@ CREATE POLICY commissions_admin_delete ON commissions
 DROP POLICY IF EXISTS payouts_supplier_select ON payouts;
 DROP POLICY IF EXISTS payouts_admin_all ON payouts;
 
+DROP POLICY IF EXISTS payouts_select ON payouts;
 CREATE POLICY payouts_select ON payouts
   FOR SELECT TO authenticated
   USING (
@@ -299,15 +332,18 @@ CREATE POLICY payouts_select ON payouts
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS payouts_admin_insert ON payouts;
 CREATE POLICY payouts_admin_insert ON payouts
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS payouts_admin_update ON payouts;
 CREATE POLICY payouts_admin_update ON payouts
   FOR UPDATE TO authenticated
   USING ((SELECT is_admin()))
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS payouts_admin_delete ON payouts;
 CREATE POLICY payouts_admin_delete ON payouts
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -322,6 +358,7 @@ CREATE POLICY payouts_admin_delete ON payouts
 DROP POLICY IF EXISTS stock_audit_supplier_select ON stock_audit_log;
 DROP POLICY IF EXISTS stock_audit_admin_all ON stock_audit_log;
 
+DROP POLICY IF EXISTS stock_audit_select ON stock_audit_log;
 CREATE POLICY stock_audit_select ON stock_audit_log
   FOR SELECT TO authenticated
   USING (
@@ -329,15 +366,18 @@ CREATE POLICY stock_audit_select ON stock_audit_log
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS stock_audit_admin_insert ON stock_audit_log;
 CREATE POLICY stock_audit_admin_insert ON stock_audit_log
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS stock_audit_admin_update ON stock_audit_log;
 CREATE POLICY stock_audit_admin_update ON stock_audit_log
   FOR UPDATE TO authenticated
   USING ((SELECT is_admin()))
   WITH CHECK ((SELECT is_admin()));
 
+DROP POLICY IF EXISTS stock_audit_admin_delete ON stock_audit_log;
 CREATE POLICY stock_audit_admin_delete ON stock_audit_log
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
@@ -355,6 +395,7 @@ DROP POLICY IF EXISTS supplier_documents_supplier_insert ON supplier_documents;
 DROP POLICY IF EXISTS supplier_documents_supplier_update ON supplier_documents;
 DROP POLICY IF EXISTS supplier_documents_admin_all ON supplier_documents;
 
+DROP POLICY IF EXISTS supplier_documents_select ON supplier_documents;
 CREATE POLICY supplier_documents_select ON supplier_documents
   FOR SELECT TO authenticated
   USING (
@@ -362,6 +403,7 @@ CREATE POLICY supplier_documents_select ON supplier_documents
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS supplier_documents_insert ON supplier_documents;
 CREATE POLICY supplier_documents_insert ON supplier_documents
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -369,6 +411,7 @@ CREATE POLICY supplier_documents_insert ON supplier_documents
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS supplier_documents_update ON supplier_documents;
 CREATE POLICY supplier_documents_update ON supplier_documents
   FOR UPDATE TO authenticated
   USING (
@@ -380,6 +423,7 @@ CREATE POLICY supplier_documents_update ON supplier_documents
     OR (SELECT is_admin())
   );
 
+DROP POLICY IF EXISTS supplier_documents_admin_delete ON supplier_documents;
 CREATE POLICY supplier_documents_admin_delete ON supplier_documents
   FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
