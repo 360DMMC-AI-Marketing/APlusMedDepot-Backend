@@ -1,7 +1,54 @@
 # Database Schema
 
 ## Overview
-Final schema derived from numbered migrations `000` through `030` (31 files).
+Final schema derived from numbered migrations `000` through `040`.
+
+## Status Enum Mapping — For McKesson Integration
+
+The actual DB enum values differ from common spec naming in some cases. The
+table below is the source of truth.
+
+### `orders.status`
+| DB Value               | Spec/Display Name  | Description                              |
+|------------------------|--------------------|------------------------------------------|
+| `pending_payment`      | pending_payment    | Order created, awaiting payment          |
+| `payment_processing`   | payment_processing | Stripe PaymentIntent in flight           |
+| `payment_confirmed`    | confirmed          | Payment succeeded                        |
+| `awaiting_fulfillment` | processing         | Awaiting supplier fulfillment            |
+| `partially_shipped`    | partially_shipped  | Some suppliers have shipped              |
+| `fully_shipped`        | shipped            | All suppliers have shipped               |
+| `delivered`            | delivered          | All items delivered                      |
+| `cancelled`            | cancelled          | Order cancelled                          |
+| `refunded`             | refunded           | Full refund processed                    |
+
+### `orders.payment_status`
+| DB Value             | Description                                                |
+|----------------------|------------------------------------------------------------|
+| `pending`            | No payment initiated                                       |
+| `processing`         | PaymentIntent created, awaiting webhook                    |
+| `paid`               | Payment confirmed (legacy `succeeded` backfilled in 040)   |
+| `failed`             | Payment attempt failed                                     |
+| `partially_refunded` | Partial refund issued                                      |
+| `refunded`           | Full refund issued                                         |
+
+### `order_items.fulfillment_status`
+| DB Value     | Description                                  |
+|--------------|----------------------------------------------|
+| `pending`    | Not yet picked up by supplier                |
+| `processing` | Supplier is preparing the order              |
+| `shipped`    | Shipped — `tracking_number` + `carrier` set  |
+| `delivered`  | Confirmed delivered                          |
+
+### `payments.status`
+Retains Stripe-native values (`succeeded`, `failed`, `refunded`, etc.) and is
+NOT migrated. Do not conflate with `orders.payment_status`.
+
+### Notes for Integrators
+- Forward-only fulfillment transitions: `pending → processing → shipped → delivered`.
+- `shipped` requires `trackingNumber` (non-empty) and `carrier ∈ {USPS, UPS, FedEx, DHL, Other}`.
+- Webhook events are deduplicated at the DB layer via the
+  `payments_stripe_event_id_unique` partial index (migration 039).
+- All timestamps are UTC ISO 8601; all monetary amounts are `NUMERIC(10,2)` USD.
 
 ## Global Database Objects
 

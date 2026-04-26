@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../config/supabase";
-import { conflict, forbidden, notFound } from "../utils/errors";
+import { badRequest, conflict, forbidden, notFound } from "../utils/errors";
 import { sendShippingNotification } from "./email.service";
 import type {
   SupplierOrderView,
@@ -434,6 +434,18 @@ export class SupplierOrderService {
 
     if (item.supplier_id !== supplierId) {
       throw forbidden("You can only update your own order items");
+    }
+
+    // Defense-in-depth: enforce tracking + carrier whitelist server-side
+    // (controller Zod schema is the primary guard; this catches direct service callers).
+    if (data.fulfillmentStatus === "shipped") {
+      if (!data.trackingNumber || data.trackingNumber.trim().length === 0) {
+        throw badRequest("trackingNumber is required when marking as shipped");
+      }
+      const VALID_CARRIERS = ["USPS", "UPS", "FedEx", "DHL", "Other"] as const;
+      if (!data.carrier || !(VALID_CARRIERS as readonly string[]).includes(data.carrier)) {
+        throw badRequest("carrier must be one of: USPS, UPS, FedEx, DHL, Other");
+      }
     }
 
     // Validate state transition
