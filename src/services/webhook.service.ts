@@ -82,7 +82,7 @@ export class WebhookService {
       .update({ payment_status: "paid", status: "payment_confirmed" })
       .eq("id", orderId);
 
-    await PaymentAuditService.logPaymentEvent({
+    const inserted = await PaymentAuditService.logPaymentEvent({
       orderId,
       stripePaymentIntentId: paymentIntent.id,
       amount: paymentIntent.amount / 100,
@@ -92,6 +92,14 @@ export class WebhookService {
       stripeEventId: event.id,
       paidAt: new Date().toISOString(),
     });
+
+    // DB-level dedup (migration 039 UNIQUE INDEX on stripe_event_id):
+    // if the row already exists, another instance/redelivery already ran
+    // the hooks. Skip to avoid double-crediting commissions.
+    if (!inserted) {
+      WebhookService.markProcessed(event.id);
+      return;
+    }
 
     await onPaymentSuccess(orderId);
 

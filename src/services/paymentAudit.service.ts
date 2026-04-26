@@ -1,9 +1,22 @@
 import { supabaseAdmin } from "../config/supabase";
 import type { PaymentRecord, LogPaymentEventData } from "../types/payment.types";
 
+type PgError = { code?: string; message?: string };
+
+function isUniqueViolation(err: unknown): boolean {
+  const e = err as PgError | null;
+  if (!e) return false;
+  return e.code === "23505" || /duplicate key|unique/i.test(e.message ?? "");
+}
+
 export class PaymentAuditService {
-  static async logPaymentEvent(data: LogPaymentEventData): Promise<void> {
-    await supabaseAdmin.from("payments").insert({
+  /**
+   * Insert a payment audit row. Returns true if inserted, false if the
+   * stripe_event_id already exists (DB-level webhook dedup via UNIQUE INDEX
+   * payments_stripe_event_id_unique — see migration 039).
+   */
+  static async logPaymentEvent(data: LogPaymentEventData): Promise<boolean> {
+    const { error } = await supabaseAdmin.from("payments").insert({
       order_id: data.orderId,
       stripe_payment_intent_id: data.stripePaymentIntentId,
       amount: data.amount,
@@ -15,6 +28,17 @@ export class PaymentAuditService {
       paid_at: data.paidAt,
       metadata: data.metadata ?? {},
     });
+
+    if (error) {
+      if (isUniqueViolation(error)) {
+        console.log(
+          `[PAYMENT_AUDIT] Duplicate stripe_event_id ${data.stripeEventId} — already processed`,
+        );
+        return false;
+      }
+      console.error(`[PAYMENT_AUDIT] Failed to insert payment row: ${error.message}`);
+    }
+    return !error;
   }
 
   static async getPaymentHistory(orderId: string): Promise<PaymentRecord[]> {
