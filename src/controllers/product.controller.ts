@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 
 import { ProductService } from "../services/product.service";
 import { StorageService } from "../services/storage.service";
+import type { Product } from "../types/product.types";
 import {
   createProductSchema,
   updateProductSchema,
@@ -10,6 +11,14 @@ import {
   uuidParamSchema,
 } from "../validators/product.validator";
 import { notFound, badRequest, forbidden } from "../utils/errors";
+
+type PublicProduct = Omit<Product, "price" | "originalPrice"> & {
+  price: number | null;
+  originalPrice: number | null;
+};
+
+const stripPriceForAnonymous = (product: Product, isAuthed: boolean): PublicProduct =>
+  isAuthed ? product : { ...product, price: null, originalPrice: null };
 
 export class ProductController {
   static async list(req: Request, res: Response): Promise<void> {
@@ -20,16 +29,24 @@ export class ProductController {
     }
 
     const result = await ProductService.list(query);
+    const isAuthed = !!req.user;
 
-    res.status(200).json(result);
+    res.status(200).json({
+      ...result,
+      data: result.data.map((p) => stripPriceForAnonymous(p, isAuthed)),
+    });
   }
 
   static async search(req: Request, res: Response): Promise<void> {
     const query = searchQuerySchema.parse(req.query);
 
     const result = await ProductService.search(query);
+    const isAuthed = !!req.user;
 
-    res.status(200).json(result);
+    res.status(200).json({
+      ...result,
+      data: result.data.map((p) => stripPriceForAnonymous(p, isAuthed)),
+    });
   }
 
   static async getById(req: Request, res: Response): Promise<void> {
@@ -40,7 +57,7 @@ export class ProductController {
       throw notFound("Product");
     }
 
-    res.status(200).json(product);
+    res.status(200).json(stripPriceForAnonymous(product, !!req.user));
   }
 
   static async create(req: Request, res: Response): Promise<void> {
