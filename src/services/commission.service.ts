@@ -139,6 +139,45 @@ export class CommissionService {
       supplierAmount: Number(row.supplier_amount),
     }));
 
+    // ── Penny Reconciliation ──────────────────────────────────────────────
+    // Independent per-item rounding can drift the summed commission+supplier
+    // amounts from the true order subtotal by a cent. Absorb the drift into
+    // the last item's supplier_amount so totals reconcile to the penny.
+    const orderSubtotal = items.reduce((sum, item) => sum + Number(item.subtotal), 0);
+    const totalCommission = results.reduce((sum, r) => sum + r.commissionAmount, 0);
+    const totalSupplier = results.reduce((sum, r) => sum + r.supplierAmount, 0);
+    const drift = Math.round((orderSubtotal - totalCommission - totalSupplier) * 100) / 100;
+
+    if (drift !== 0 && results.length > 0) {
+      const maxAcceptable = Math.round(results.length * 0.01 * 100) / 100;
+      if (Math.abs(drift) > maxAcceptable) {
+        console.error(
+          `[COMMISSION] UNEXPECTED drift ${drift} on order ${orderId} (max acceptable ${maxAcceptable}). Investigate.`,
+        );
+      }
+
+      const last = results[results.length - 1];
+      const corrected = Math.round((last.supplierAmount + drift) * 100) / 100;
+
+      const { error: fixError } = await supabaseAdmin
+        .from("commissions")
+        .update({ supplier_amount: corrected, supplier_payout: corrected })
+        .eq("id", last.commissionId);
+
+      if (fixError) {
+        console.error(`[COMMISSION] Reconciliation update failed: ${fixError.message}`);
+      } else {
+        // Roll the drift into the supplier-balance increment for the last item's supplier
+        const current = supplierBalanceIncrements.get(last.supplierId) ?? 0;
+        supplierBalanceIncrements.set(last.supplierId, current + drift);
+        last.supplierAmount = corrected;
+        console.log(
+          `[COMMISSION] Penny reconciliation applied: drift=${drift} on commission ${last.commissionId}`,
+        );
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     // Batch RPC calls: one per unique supplier instead of per item
     for (const [supplierId, amount] of supplierBalanceIncrements) {
       const { error: balanceError } = await supabaseAdmin.rpc("increment_supplier_balance", {

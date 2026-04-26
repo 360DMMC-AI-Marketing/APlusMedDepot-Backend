@@ -1539,3 +1539,19 @@ CREATE INDEX IF NOT EXISTS idx_commissions_status ON commissions(status);
 
 -- Composite index for supplier + status filtering
 CREATE INDEX IF NOT EXISTS idx_commissions_supplier_status ON commissions(supplier_id, status);
+
+-- ============================================
+-- MIGRATION: 039_webhook_dedup_constraint.sql
+-- ============================================
+-- Database-level deduplication for Stripe webhook events.
+-- A duplicate stripe_event_id INSERT raises 23505 unique_violation, which
+-- WebhookService treats as "already processed".
+CREATE UNIQUE INDEX IF NOT EXISTS payments_stripe_event_id_unique
+  ON payments (stripe_event_id)
+  WHERE stripe_event_id IS NOT NULL;
+
+-- ============================================
+-- MIGRATION: 040_backfill_payment_status.sql
+-- ============================================
+-- Belt-and-suspenders backfill for any legacy 'succeeded' orders.payment_status.
+UPDATE orders SET payment_status = 'paid' WHERE payment_status = 'succeeded';

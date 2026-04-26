@@ -176,6 +176,7 @@ CREATE POLICY supplier_documents_supplier_update ON supplier_documents
 -- ------------------------------------------
 DROP POLICY IF EXISTS carts_customer_crud ON carts;
 DROP POLICY IF EXISTS carts_admin_all ON carts;
+DROP POLICY IF EXISTS carts_access ON carts;
 
 CREATE POLICY carts_access ON carts
   FOR ALL TO authenticated
@@ -193,6 +194,7 @@ CREATE POLICY carts_access ON carts
 -- ------------------------------------------
 DROP POLICY IF EXISTS cart_items_customer_crud ON cart_items;
 DROP POLICY IF EXISTS cart_items_admin_all ON cart_items;
+DROP POLICY IF EXISTS cart_items_access ON cart_items;
 
 CREATE POLICY cart_items_access ON cart_items
   FOR ALL TO authenticated
@@ -216,6 +218,7 @@ CREATE POLICY cart_items_access ON cart_items
 -- ------------------------------------------
 -- 3a. _migrations — internal migration tracking, service_role only
 -- ------------------------------------------
+DROP POLICY IF EXISTS migrations_service_all ON _migrations;
 CREATE POLICY migrations_service_all ON _migrations
   FOR ALL TO service_role
   USING (true) WITH CHECK (true);
@@ -223,10 +226,12 @@ CREATE POLICY migrations_service_all ON _migrations
 -- ------------------------------------------
 -- 3b. chatbot_leads — lead capture, service_role write + admin read
 -- ------------------------------------------
+DROP POLICY IF EXISTS chatbot_leads_service_all ON chatbot_leads;
 CREATE POLICY chatbot_leads_service_all ON chatbot_leads
   FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS chatbot_leads_admin_read ON chatbot_leads;
 CREATE POLICY chatbot_leads_admin_read ON chatbot_leads
   FOR SELECT TO authenticated
   USING ((SELECT is_admin()));
@@ -234,10 +239,12 @@ CREATE POLICY chatbot_leads_admin_read ON chatbot_leads
 -- ------------------------------------------
 -- 3c. leads — lead capture, service_role write + admin read
 -- ------------------------------------------
+DROP POLICY IF EXISTS leads_service_all ON leads;
 CREATE POLICY leads_service_all ON leads
   FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS leads_admin_read ON leads;
 CREATE POLICY leads_admin_read ON leads
   FOR SELECT TO authenticated
   USING ((SELECT is_admin()));
